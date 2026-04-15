@@ -1,0 +1,236 @@
+// =============================================================================
+// Prisma Schema — Plataforma Volve
+// Generator: @prisma/client
+// Datasource: PostgreSQL
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Usuários (autenticação NextAuth + perfis)
+// =============================================================================
+model Usuario {
+  id         String   @id @default(uuid())
+  nome       String
+  email      String   @unique
+  senhaHash  String?  @map("senha_hash")
+  perfil     Perfil   @default(equipe)
+  clienteId  String?  @map("cliente_id")
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relações
+  cliente    Cliente? @relation(fields: [clienteId], references: [id])
+
+  @@map("usuarios")
+}
+
+enum Perfil {
+  equipe
+  cliente
+}
+
+// =============================================================================
+// Clientes
+// =============================================================================
+model Cliente {
+  id         String   @id @default(uuid())
+  nome       String
+  email      String   @unique
+  whatsapp   String?
+  cpfCnpj    String?  @unique @map("cpf_cnpj")
+  asaasId    String?  @map("asaas_id")
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relações
+  usuarios   Usuario[]
+  entregas   Entrega[]
+  aprovacoes Aprovacao[]
+  propostas  Proposta[]
+  contratos  Contrato[]
+  cobrancas  Cobranca[]
+
+  @@map("clientes")
+}
+
+// =============================================================================
+// Serviços (catálogo)
+// =============================================================================
+model Servico {
+  id         String    @id @default(uuid())
+  nome       String
+  descricao  String?
+  preco      Decimal   @default(0) @db.Decimal(12, 2)
+  categoria  String?
+  ativo      Boolean   @default(true)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // Relações
+  entregas   Entrega[]
+
+  @@map("servicos")
+}
+
+// =============================================================================
+// Entregas (tarefas vinculadas ao ClickUp)
+// =============================================================================
+model Entrega {
+  id             String        @id @default(uuid())
+  clienteId      String        @map("cliente_id")
+  servicoId      String?       @map("servico_id")
+  clickupTaskId  String?       @map("clickup_task_id")
+  titulo         String
+  descricao      String?
+  status         StatusEntrega @default(em_producao)
+  arquivoUrl     String?       @map("arquivo_url")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // Relações
+  cliente        Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  servico        Servico?   @relation(fields: [servicoId], references: [id], onDelete: SetNull)
+  aprovacoes     Aprovacao[]
+
+  @@map("entregas")
+}
+
+enum StatusEntrega {
+  em_producao
+  aguardando_aprovacao
+  aprovado
+  reprovado
+  entregue
+}
+
+// =============================================================================
+// Aprovações
+// =============================================================================
+model Aprovacao {
+  id          String          @id @default(uuid())
+  entregaId   String          @map("entrega_id")
+  clienteId   String          @map("cliente_id")
+  status      StatusAprovacao @default(aguardando)
+  comentario  String?
+  aprovadoEm  DateTime?       @map("aprovado_em")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  // Relações
+  entrega     Entrega  @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  cliente     Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("aprovacoes")
+}
+
+enum StatusAprovacao {
+  aguardando
+  aprovado
+  reprovado
+}
+
+// =============================================================================
+// Propostas
+// =============================================================================
+model Proposta {
+  id            String        @id @default(uuid())
+  clienteId     String        @map("cliente_id")
+  titulo        String
+  descricao     String?
+  itens         Json          @default("[]")
+  valorTotal    Decimal       @default(0) @map("valor_total") @db.Decimal(12, 2)
+  token         String        @unique
+  status        StatusProposta @default(rascunho)
+  validade      DateTime?     @db.Date
+  pdfUrl        String?       @map("pdf_url")
+  visualizadoEm DateTime?     @map("visualizado_em")
+  aceitoEm      DateTime?     @map("aceito_em")
+  recusadoEm    DateTime?     @map("recusado_em")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relações
+  cliente       Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  contratos     Contrato[]
+
+  @@map("propostas")
+}
+
+enum StatusProposta {
+  rascunho
+  enviada
+  visualizada
+  aceita
+  recusada
+  expirada
+}
+
+// =============================================================================
+// Contratos (Autentique)
+// =============================================================================
+model Contrato {
+  id             String         @id @default(uuid())
+  clienteId      String         @map("cliente_id")
+  propostaId     String?        @map("proposta_id")
+  autentiqueId   String?        @map("autentique_id")
+  titulo         String
+  conteudo       String?
+  status         StatusContrato @default(pendente)
+  documentoUrl   String?        @map("documento_url")
+  linkAssinatura String?        @map("link_assinatura")
+  assinadoEm    DateTime?       @map("assinado_em")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  // Relações
+  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  proposta       Proposta? @relation(fields: [propostaId], references: [id], onDelete: SetNull)
+  cobrancas      Cobranca[]
+
+  @@map("contratos")
+}
+
+enum StatusContrato {
+  pendente
+  enviado
+  assinado
+  cancelado
+}
+
+// =============================================================================
+// Cobranças (Asaas)
+// =============================================================================
+model Cobranca {
+  id             String   @id @default(uuid())
+  clienteId      String   @map("cliente_id")
+  contratoId     String?  @map("contrato_id")
+  asaasId        String?  @map("asaas_id")
+  descricao      String
+  valor          Decimal  @db.Decimal(12, 2)
+  vencimento     DateTime @db.Date
+  tipo           String   @default("BOLETO")
+  status         String   @default("PENDING")
+  linkPagamento  String?  @map("link_pagamento")
+  invoiceUrl     String?  @map("invoice_url")
+  pixCopaCola    String?  @map("pix_copia_cola")
+  pagoEm         DateTime? @map("pago_em")
+  notificadoEm   DateTime? @map("notificado_em")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relações
+  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  contrato       Contrato? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
+
+  @@map("cobrancas")
+}

@@ -1,0 +1,141 @@
+version: '3.8'
+
+# =============================================================================
+# Plataforma Volve — Stack Completa
+# Serviços: PostgreSQL, Redis, Evolution API, Caddy (SSL automático)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Banco de dados principal
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: volve_postgres
+    environment:
+      POSTGRES_DB: volve
+      POSTGRES_USER: volve
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "127.0.0.1:5432:5432"   # Expõe apenas em localhost por segurança
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volve -d volve"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Cache e filas
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: volve_redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Evolution API — Gateway WhatsApp
+  # Documentação: https://doc.evolution-api.com
+  # ---------------------------------------------------------------------------
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: volve_evolution
+    environment:
+      SERVER_URL: https://evolution.volve.com.br
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      # Banco de dados da Evolution (schema separado)
+      DATABASE_ENABLED: true
+      DATABASE_CONNECTION_URI: postgresql://volve:${POSTGRES_PASSWORD}@postgres:5432/volve
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      # Redis para filas de mensagens
+      CACHE_REDIS_ENABLED: true
+      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: true
+      # Webhooks globais
+      WEBHOOK_GLOBAL_ENABLED: false
+      # Configurações de QR Code
+      QRCODE_LIMIT: 30
+      QRCODE_COLOR: "#000000"
+      # Modo de instância
+      DEL_INSTANCE: false
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # App Next.js — Painel interno + Portal do cliente
+  # Build local: docker build -t volve-app ./app
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: volve_app
+    environment:
+      DATABASE_URL: postgresql://volve:${POSTGRES_PASSWORD}@postgres:5432/volve
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NEXTAUTH_URL: https://app.volve.com.br
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      ASAAS_API_KEY: ${ASAAS_API_KEY}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN}
+      AUTENTIQUE_API_KEY: ${AUTENTIQUE_API_KEY}
+      AUTENTIQUE_WEBHOOK_SECRET: ${AUTENTIQUE_WEBHOOK_SECRET}
+      EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      CLICKUP_WEBHOOK_SECRET: ${CLICKUP_WEBHOOK_SECRET}
+      CLICKUP_API_TOKEN: ${CLICKUP_API_TOKEN}
+      CRON_SECRET: ${CRON_SECRET}
+      NEXT_PUBLIC_VPS_API_URL: https://app.volve.com.br
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Caddy — Reverse proxy com SSL automático via Let's Encrypt
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: volve_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      - app
+      - evolution-api
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

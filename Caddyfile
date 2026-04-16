@@ -5,7 +5,7 @@
 # =============================================================================
 
 # Painel interno + Portal do cliente (Next.js App)
-app.volve.com.br {
+app.volvemkt.com {
   reverse_proxy volve_app:3001
 
   # Headers de segurança
@@ -20,7 +20,7 @@ app.volve.com.br {
 
   # Logs de acesso
   log {
-    output file /var/log/caddy/app.volve.com.br.log {
+    output file /var/log/caddy/app.volvemkt.com.log {
       roll_size 10mb
       roll_keep 5
     }
@@ -31,7 +31,7 @@ app.volve.com.br {
 }
 
 # Gateway WhatsApp (Evolution API)
-evolution.volve.com.br {
+evolution.volvemkt.com {
   reverse_proxy volve_evolution:8080
 
   header {
@@ -46,7 +46,7 @@ evolution.volve.com.br {
   # respond @block_manager 403
 
   log {
-    output file /var/log/caddy/evolution.volve.com.br.log {
+    output file /var/log/caddy/evolution.volvemkt.com.log {
       roll_size 10mb
       roll_keep 5
     }

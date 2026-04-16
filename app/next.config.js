@@ -8,8 +8,8 @@ const nextConfig = {
   // Configuração de imagens (domínios externos permitidos)
   images: {
     domains: [
-      'volve.com.br',
-      'app.volve.com.br',
+      'volvemkt.com',
+      'app.volvemkt.com',
       'storage.googleapis.com',
       'cdn.asaas.com',
     ],

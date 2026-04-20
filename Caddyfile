@@ -1,0 +1,64 @@
+# =============================================================================
+# Caddyfile — Plataforma Volve
+# SSL automático via Let's Encrypt (ACME)
+# Substitua os domínios conforme necessário
+# =============================================================================
+
+# Painel interno + Portal do cliente (Next.js App)
+app.volvemkt.com {
+  reverse_proxy volve_app:3001
+
+  # Headers de segurança
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    -Server
+  }
+
+  # Logs de acesso
+  log {
+    output file /var/log/caddy/app.volvemkt.com.log {
+      roll_size 10mb
+      roll_keep 5
+    }
+    format json
+  }
+
+  encode gzip zstd
+}
+
+# Gateway WhatsApp (Evolution API)
+evolution.volvemkt.com {
+  reverse_proxy volve_evolution:8080
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    -Server
+  }
+
+  # Bloqueia acesso ao painel da Evolution em produção
+  # Descomente para restringir o manager web
+  # @block_manager path /manager/*
+  # respond @block_manager 403
+
+  log {
+    output file /var/log/caddy/evolution.volvemkt.com.log {
+      roll_size 10mb
+      roll_keep 5
+    }
+    format json
+  }
+
+  encode gzip
+}
+
+# Site público (Vercel) — apenas caso queira servir localmente
+# volvemkt.com {
+#   reverse_proxy https://volve.vercel.app {
+#     header_up Host {upstream_hostport}
+#   }
+# }

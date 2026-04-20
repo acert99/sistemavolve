@@ -1,0 +1,31 @@
+{
+  "rewrites": [
+    {
+      "source": "/painel/:path*",
+      "destination": "https://SEU_VPS_IP/painel/:path*"
+    },
+    {
+      "source": "/cliente/:path*",
+      "destination": "https://SEU_VPS_IP/cliente/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,398 @@
+// =============================================================================
+// Prisma Schema - Plataforma Volve
+// Datasource: PostgreSQL
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Usuarios (autenticacao NextAuth + perfis)
+// =============================================================================
+model Usuario {
+  id               String             @id @default(uuid())
+  nome             String
+  email            String             @unique
+  senhaHash        String?            @map("senha_hash")
+  perfil           Perfil             @default(equipe)
+  clienteId        String?            @map("cliente_id")
+  ativo            Boolean            @default(true)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  cliente          Cliente?           @relation(fields: [clienteId], references: [id])
+  mensagensCriadas MensagemAgendada[] @relation("MensagemAgendadaCriador")
+  leadsAtribuidos  Lead[]             @relation("LeadAssignee")
+  leadTimeline     LeadTimeline[]     @relation("LeadTimelineCreator")
+
+  @@map("usuarios")
+}
+
+enum Perfil {
+  equipe
+  cliente
+}
+
+// =============================================================================
+// Clientes
+// =============================================================================
+model Cliente {
+  id                 String             @id @default(uuid())
+  nome               String
+  email              String             @unique
+  whatsapp           String?
+  cpfCnpj            String?            @unique @map("cpf_cnpj")
+  asaasId            String?            @map("asaas_id")
+  ativo              Boolean            @default(true)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  usuarios           Usuario[]
+  entregas           Entrega[]
+  aprovacoes         Aprovacao[]
+  propostas          Proposta[]
+  contratos          Contrato[]
+  cobrancas          Cobranca[]
+  mensagensAgendadas MensagemAgendada[]
+  leadOrigem         Lead?              @relation("LeadClient")
+
+  @@map("clientes")
+}
+
+enum LeadSource {
+  indicacao
+  instagram
+  site
+  outro
+}
+
+enum LeadStage {
+  new
+  contacted
+  meeting
+  proposal
+  negotiation
+  won
+  lost
+}
+
+enum LeadTimelineType {
+  stage_change
+  wa_sent
+  wa_received
+  note
+  proposal_sent
+  meeting_scheduled
+  converted
+}
+
+enum FollowUpJobStatus {
+  pending
+  sent
+  cancelled
+  failed
+}
+
+// =============================================================================
+// Leads / CRM comercial
+// =============================================================================
+model Lead {
+  id               String             @id @default(uuid())
+  name             String             @map("name")
+  company          String?
+  phone            String
+  email            String?
+  instagram        String?
+  source           LeadSource         @default(outro)
+  referredBy       String?            @map("referred_by")
+  stage            LeadStage          @default(new)
+  assignedTo       String?            @map("assigned_to")
+  servicesInterest String[]           @default([]) @map("services_interest")
+  estimatedValue   Decimal?           @map("estimated_value") @db.Decimal(10, 2)
+  notes            String?
+  nextAction       String?            @map("next_action")
+  nextActionDate   DateTime?          @map("next_action_date")
+  lostReason       String?            @map("lost_reason")
+  convertedAt      DateTime?          @map("converted_at")
+  clientId         String?            @unique @map("client_id")
+  stageChangedAt   DateTime           @default(now()) @map("stage_changed_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  assignee         Usuario?           @relation("LeadAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  client           Cliente?           @relation("LeadClient", fields: [clientId], references: [id], onDelete: SetNull)
+  timeline         LeadTimeline[]
+  followUpJobs     FollowUpJob[]
+  propostas        Proposta[]
+
+  @@index([stage])
+  @@index([assignedTo])
+  @@index([phone])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+model LeadTimeline {
+  id         String            @id @default(uuid())
+  leadId      String            @map("lead_id")
+  type       LeadTimelineType
+  content    String?
+  metadata   Json?
+  createdBy  String?           @map("created_by")
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  lead       Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  creator    Usuario?          @relation("LeadTimelineCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@map("lead_timeline")
+}
+
+model FollowUpJob {
+  id           String            @id @default(uuid())
+  leadId        String            @map("lead_id")
+  type         String
+  scheduledAt  DateTime          @map("scheduled_at")
+  sentAt       DateTime?         @map("sent_at")
+  cancelledAt  DateTime?         @map("cancelled_at")
+  message      String
+  metadata     Json?
+  status       FollowUpJobStatus @default(pending)
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  lead         Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([scheduledAt])
+  @@map("follow_up_jobs")
+}
+
+// =============================================================================
+// Servicos (catalogo)
+// =============================================================================
+model Servico {
+  id         String    @id @default(uuid())
+  nome       String
+  descricao  String?
+  preco      Decimal   @default(0) @db.Decimal(12, 2)
+  categoria  String?
+  ativo      Boolean   @default(true)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  entregas   Entrega[]
+
+  @@map("servicos")
+}
+
+// =============================================================================
+// Entregas (tarefas vinculadas ao ClickUp)
+// =============================================================================
+model Entrega {
+  id             String        @id @default(uuid())
+  clienteId      String        @map("cliente_id")
+  servicoId      String?       @map("servico_id")
+  clickupTaskId  String?       @map("clickup_task_id")
+  titulo         String
+  descricao      String?
+  status         StatusEntrega @default(em_producao)
+  arquivoUrl     String?       @map("arquivo_url")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  cliente        Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  servico        Servico?     @relation(fields: [servicoId], references: [id], onDelete: SetNull)
+  aprovacoes     Aprovacao[]
+
+  @@map("entregas")
+}
+
+enum StatusEntrega {
+  em_producao
+  aguardando_aprovacao
+  aprovado
+  reprovado
+  entregue
+}
+
+// =============================================================================
+// Aprovacoes
+// =============================================================================
+model Aprovacao {
+  id          String          @id @default(uuid())
+  entregaId   String          @map("entrega_id")
+  clienteId   String          @map("cliente_id")
+  status      StatusAprovacao @default(aguardando)
+  comentario  String?
+  aprovadoEm  DateTime?       @map("aprovado_em")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  entrega     Entrega         @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  cliente     Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("aprovacoes")
+}
+
+enum StatusAprovacao {
+  aguardando
+  aprovado
+  reprovado
+}
+
+// =============================================================================
+// Propostas
+// =============================================================================
+model Proposta {
+  id            String         @id @default(uuid())
+  clienteId     String?        @map("cliente_id")
+  leadId        String?        @map("lead_id")
+  titulo        String
+  descricao     String?
+  itens         Json           @default("[]")
+  valorTotal    Decimal        @default(0) @map("valor_total") @db.Decimal(12, 2)
+  token         String         @unique
+  status        StatusProposta @default(rascunho)
+  validade      DateTime?      @db.Date
+  pdfUrl        String?        @map("pdf_url")
+  visualizadoEm DateTime?      @map("visualizado_em")
+  aceitoEm      DateTime?      @map("aceito_em")
+  recusadoEm    DateTime?      @map("recusado_em")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  cliente       Cliente?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  lead          Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  contratos     Contrato[]
+
+  @@map("propostas")
+}
+
+enum StatusProposta {
+  rascunho
+  enviada
+  visualizada
+  aceita
+  recusada
+  expirada
+}
+
+// =============================================================================
+// Contratos (Autentique)
+// =============================================================================
+model Contrato {
+  id             String         @id @default(uuid())
+  clienteId      String         @map("cliente_id")
+  propostaId     String?        @map("proposta_id")
+  autentiqueId   String?        @map("autentique_id")
+  titulo         String
+  conteudo       String?
+  status         StatusContrato @default(pendente)
+  documentoUrl   String?        @map("documento_url")
+  linkAssinatura String?        @map("link_assinatura")
+  assinadoEm     DateTime?      @map("assinado_em")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  cliente        Cliente        @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  proposta       Proposta?      @relation(fields: [propostaId], references: [id], onDelete: SetNull)
+  cobrancas      Cobranca[]
+
+  @@map("contratos")
+}
+
+enum StatusContrato {
+  pendente
+  enviado
+  assinado
+  cancelado
+}
+
+// =============================================================================
+// Cobrancas (Asaas)
+// =============================================================================
+model Cobranca {
+  id             String    @id @default(uuid())
+  clienteId      String    @map("cliente_id")
+  contratoId     String?   @map("contrato_id")
+  asaasId        String?   @map("asaas_id")
+  descricao      String
+  valor          Decimal   @db.Decimal(12, 2)
+  vencimento     DateTime  @db.Date
+  tipo           String    @default("BOLETO")
+  status         String    @default("PENDING")
+  linkPagamento  String?   @map("link_pagamento")
+  invoiceUrl     String?   @map("invoice_url")
+  pixCopaCola    String?   @map("pix_copia_cola")
+  pagoEm         DateTime? @map("pago_em")
+  notificadoEm   DateTime? @map("notificado_em")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  contrato       Contrato? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
+
+  @@map("cobrancas")
+}
+
+// =============================================================================
+// Comunicacao (WhatsApp, templates e mensagens agendadas)
+// =============================================================================
+model CanalWhatsApp {
+  id               String    @id @default(uuid())
+  provider         String    @default("evolution")
+  instanceName     String    @map("instance_name")
+  status           String    @default("disconnected")
+  phoneNumber      String?   @map("phone_number")
+  lastConnectionAt DateTime? @map("last_connection_at")
+  lastError        String?   @map("last_error")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([provider, instanceName])
+  @@map("canais_whatsapp")
+}
+
+model TemplateMensagem {
+  id                 String             @id @default(uuid())
+  nome               String             @map("name")
+  categoria          String?
+  stage              String?            @map("stage")
+  conteudo           String             @map("content")
+  ativo              Boolean            @default(true) @map("is_active")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  mensagensAgendadas MensagemAgendada[]
+
+  @@map("templates_mensagem")
+}
+
+model MensagemAgendada {
+  id                String            @id @default(uuid())
+  clienteId         String            @map("cliente_id")
+  canal             String            @default("whatsapp") @map("channel")
+  templateId        String?           @map("template_id")
+  conteudoMensagem  String            @map("message_content")
+  agendadoPara      DateTime          @map("scheduled_for")
+  status            String            @default("scheduled")
+  externalMessageId String?           @map("external_message_id")
+  enviadoEm         DateTime?         @map("sent_at")
+  mensagemErro      String?           @map("error_message")
+  createdBy         String            @map("created_by")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  cliente           Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  template          TemplateMensagem? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  criador           Usuario           @relation("MensagemAgendadaCriador", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([status, agendadoPara])
+  @@map("mensagens_agendadas")
+}

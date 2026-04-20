@@ -1,0 +1,43 @@
+# Dependências
+node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Variáveis de ambiente reais (nunca commitar)
+.env
+.env.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Arquivos temporários e de deploy
+*.tgz
+*.zip
+tmp-*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Prisma
+app/prisma/generated/
+
+# Docker volumes (dados locais)
+postgres-data/
+redis-data/

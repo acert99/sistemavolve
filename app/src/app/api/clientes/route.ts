@@ -3,12 +3,19 @@
 // GET  /api/clientes  → lista todos os clientes
 // POST /api/clientes  → cria novo cliente
 // =============================================================================
+import { z } from 'zod'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { createOrFindCustomer } from '@/lib/asaas'
-import type { CreateClientePayload } from '@/types'
+
+const createClienteSchema = z.object({
+  nome:     z.string().min(1, 'Nome é obrigatório'),
+  email:    z.string().email('E-mail inválido'),
+  whatsapp: z.string().optional(),
+  cpfCnpj:  z.string().optional(),
+})
 
 // ---------------------------------------------------------------------------
 // GET — lista clientes com paginação e busca
@@ -77,22 +84,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 })
   }
 
-  let body: CreateClientePayload
+  let rawBody: unknown
   try {
-    body = await request.json()
+    rawBody = await request.json()
   } catch {
     return NextResponse.json({ success: false, error: 'JSON inválido' }, { status: 400 })
   }
 
-  const { nome, email, whatsapp, cpfCnpj } = body
-
-  // Validações básicas
-  if (!nome?.trim() || !email?.trim()) {
-    return NextResponse.json(
-      { success: false, error: 'Nome e e-mail são obrigatórios' },
-      { status: 400 },
-    )
+  const parsed = createClienteSchema.safeParse(rawBody)
+  if (!parsed.success) {
+    const msg = parsed.error.errors.map(e => e.message).join(', ')
+    return NextResponse.json({ success: false, error: msg }, { status: 400 })
   }
+
+  const { nome, email, whatsapp, cpfCnpj } = parsed.data
 
   // Verifica duplicidade
   const existente = await prisma.cliente.findFirst({

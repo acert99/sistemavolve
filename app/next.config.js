@@ -2,6 +2,9 @@
 const nextConfig = {
   output: 'standalone',
 
+  // Remove cabeçalho que expõe tecnologia usada
+  poweredByHeader: false,
+
   // Permite importar SVGs e outros assets
   experimental: {
     serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
@@ -28,6 +31,20 @@ const nextConfig = {
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https:",
+              "media-src 'none'",
+              "object-src 'none'",
+              "frame-ancestors 'self'",
+            ].join('; '),
+          },
         ],
       },
     ]

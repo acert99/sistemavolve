@@ -10,7 +10,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json().catch(() => ({})) as { confirmReset?: boolean }
+    const body = await request.json().catch(() => ({})) as {
+      confirmReset?: boolean
+      number?: string | null
+    }
     const status = await getInstanceStatus()
     if (status.connected) {
       const webhook = await ensureInstanceWebhookConfigured()
@@ -35,14 +38,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { qrcode, error } = await resetAndConnect()
+    const { connect, error } = await resetAndConnect({ number: body.number ?? null })
     const webhook = await ensureInstanceWebhookConfigured()
 
     return NextResponse.json({
       success: true,
       data: {
         connected: false,
-        qrcode: qrcode ?? null,
+        qrcode: connect?.base64 ?? null,
+        pairingCode: connect?.pairingCode ?? null,
+        code: connect?.code ?? null,
+        count: connect?.count ?? 0,
         error: error ?? null,
         webhookConfigured: webhook.ok,
         webhookError: webhook.error,

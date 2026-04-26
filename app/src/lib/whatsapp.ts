@@ -29,6 +29,13 @@ export interface SendTextMessageResult {
   raw: unknown
 }
 
+export interface EvolutionConnectInfo {
+  count: number
+  pairingCode: string | null
+  code: string | null
+  base64: string | null
+}
+
 function headers() {
   return { 'Content-Type': 'application/json', apikey: EVOLUTION_KEY }
 }
@@ -161,18 +168,30 @@ async function createInstance(): Promise<boolean> {
   }
 }
 
-async function fetchQrCode(): Promise<string | null> {
+async function fetchConnectInfo(params?: { number?: string | null }): Promise<EvolutionConnectInfo | null> {
   try {
-    const res = await fetch(`${EVOLUTION_URL}/instance/connect/${INSTANCE_NAME}`, {
+    const url = new URL(`${EVOLUTION_URL}/instance/connect/${INSTANCE_NAME}`)
+    const number = extractPhoneNumber(params?.number)
+    if (number) url.searchParams.set('number', number)
+
+    const res = await fetch(url.toString(), {
       headers: headers(),
       cache: 'no-store',
     })
     if (!res.ok) return null
     const data = await res.json()
-    const qr = data?.base64 ?? data?.qrcode?.base64 ?? data?.code ?? null
-    // count > 0 confirma que o QR foi gerado
-    if (qr && data?.count > 0) return qr
-    return null
+
+    return {
+      count: typeof data?.count === 'number' ? data.count : 0,
+      pairingCode: typeof data?.pairingCode === 'string' ? data.pairingCode : null,
+      code: typeof data?.code === 'string' ? data.code : null,
+      base64:
+        typeof data?.base64 === 'string'
+          ? data.base64
+          : typeof data?.qrcode?.base64 === 'string'
+            ? data.qrcode.base64
+            : null,
+    }
   } catch {
     return null
   }
@@ -263,15 +282,17 @@ export async function ensureInstanceWebhookConfigured(): Promise<{
   }
 }
 
-// Deleta a instância antiga, recria e aguarda o QR ser gerado
-export async function resetAndConnect(): Promise<{ qrcode: string | null; error: string | null }> {
+// Deleta a instância antiga, recria e aguarda o código de conexão (QR/pairing) ser gerado
+export async function resetAndConnect(params?: {
+  number?: string | null
+}): Promise<{ connect: EvolutionConnectInfo | null; error: string | null }> {
   try {
     await deleteInstance()
     await sleep(1500)
 
     const created = await createInstance()
     if (!created) {
-      return { qrcode: null, error: 'Nao foi possivel criar a instancia na Evolution API' }
+      return { connect: null, error: 'Nao foi possivel criar a instancia na Evolution API' }
     }
 
     const webhookResult = await ensureInstanceWebhookConfigured()
@@ -279,19 +300,21 @@ export async function resetAndConnect(): Promise<{ qrcode: string | null; error:
     // Aguarda o Baileys inicializar e tenta até 5 vezes com 2s de intervalo
     for (let attempt = 1; attempt <= 5; attempt++) {
       await sleep(2000)
-      const qrcode = await fetchQrCode()
-      if (qrcode) return { qrcode, error: null }
+      const connect = await fetchConnectInfo({ number: params?.number })
+      if (connect && connect.count > 0 && (connect.base64 || connect.pairingCode || connect.code)) {
+        return { connect, error: null }
+      }
     }
 
     return {
-      qrcode: null,
+      connect: null,
       error: webhookResult.ok
-        ? 'QR code nao foi gerado. Verifique os logs da Evolution API e tente novamente.'
+        ? 'Codigo de conexao nao foi gerado. Informe o numero (com DDI) e tente novamente.'
         : `Webhook configurado com erro: ${webhookResult.error}`,
     }
   } catch (err) {
     return {
-      qrcode: null,
+      connect: null,
       error: err instanceof Error ? err.message : 'Erro ao iniciar conexao',
     }
   }

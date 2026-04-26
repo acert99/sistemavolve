@@ -1,3 +1,31 @@
+class NormalizeReadlinkEisdirPlugin {
+  apply(compiler) {
+    const patchInputFileSystem = (inputFileSystem) => {
+      if (!inputFileSystem || !inputFileSystem.readlink || inputFileSystem.__volveReadlinkPatch) {
+        return
+      }
+
+      const readlink = inputFileSystem.readlink.bind(inputFileSystem)
+      inputFileSystem.readlink = (path, callback) => {
+        readlink(path, (error, link) => {
+          if (error && error.code === 'EISDIR' && error.syscall === 'readlink') {
+            error.code = 'EINVAL'
+            error.message = error.message.replace('EISDIR', 'EINVAL')
+          }
+
+          callback(error, link)
+        })
+      }
+      inputFileSystem.__volveReadlinkPatch = true
+    }
+
+    patchInputFileSystem(compiler.inputFileSystem)
+    compiler.hooks.compilation.tap('NormalizeReadlinkEisdirPlugin', (compilation) => {
+      patchInputFileSystem(compilation.inputFileSystem)
+    })
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -59,6 +87,11 @@ const nextConfig = {
         permanent: false,
       },
     ]
+  },
+
+  webpack(config) {
+    config.plugins.push(new NormalizeReadlinkEisdirPlugin())
+    return config
   },
 }
 

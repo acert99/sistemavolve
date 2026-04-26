@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { registerLeadIncomingMessage } from '@/lib/leads'
+import { safeCompareSecrets } from '@/lib/security'
 
 function getWebhookToken(request: NextRequest) {
   return (
@@ -33,10 +34,10 @@ function extractContent(payload: Record<string, any>) {
 }
 
 export async function POST(request: NextRequest) {
-  const expected = process.env.EVOLUTION_WEBHOOK_SECRET ?? process.env.CRON_SECRET ?? ''
+  const expected = process.env.EVOLUTION_WEBHOOK_SECRET ?? ''
   const provided = getWebhookToken(request)
 
-  if (expected && provided && provided !== expected) {
+  if (!expected || !safeCompareSecrets(provided, expected)) {
     return NextResponse.json({ success: false, error: 'Nao autorizado' }, { status: 401 })
   }
 

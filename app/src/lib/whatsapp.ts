@@ -9,10 +9,7 @@ const APP_URL =
   process.env.NEXT_PUBLIC_VPS_API_URL ??
   process.env.NEXTAUTH_URL ??
   null
-const WEBHOOK_SECRET =
-  process.env.EVOLUTION_WEBHOOK_SECRET ??
-  process.env.CRON_SECRET ??
-  null
+const WEBHOOK_SECRET = process.env.EVOLUTION_WEBHOOK_SECRET ?? ''
 
 export interface InstanceStatus {
   connected: boolean
@@ -213,7 +210,13 @@ export async function ensureInstanceWebhookConfigured(): Promise<{
       return { ok: false, error: 'Instancia da Evolution ainda nao encontrada no banco' }
     }
 
-    const events = JSON.stringify(['SEND_MESSAGE', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'])
+    const events = JSON.stringify([
+      'SEND_MESSAGE',
+      'MESSAGES_UPDATE',
+      'MESSAGES_UPSERT',
+      'MESSAGE_RECEIVED',
+      'CONNECTION_UPDATE',
+    ])
     const requestHeaders = JSON.stringify({ 'x-webhook-token': WEBHOOK_SECRET })
 
     await prisma.$executeRaw(Prisma.sql`

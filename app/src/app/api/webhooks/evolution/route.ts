@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { registerLeadIncomingMessage } from '@/lib/leads'
 import prisma from '@/lib/prisma'
+import { safeCompareSecrets } from '@/lib/security'
 
 const INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME ?? 'volve'
-const WEBHOOK_SECRET =
-  process.env.EVOLUTION_WEBHOOK_SECRET ??
-  process.env.CRON_SECRET ??
-  ''
+const WEBHOOK_SECRET = process.env.EVOLUTION_WEBHOOK_SECRET ?? ''
 
 const STATUS_PRIORITY: Record<string, number> = {
   scheduled: 0,
@@ -15,6 +13,13 @@ const STATUS_PRIORITY: Record<string, number> = {
   delivered: 3,
   read: 4,
 }
+
+const MESSAGE_EVENTS = new Set([
+  'SEND_MESSAGE',
+  'MESSAGES_UPDATE',
+  'MESSAGES_UPSERT',
+  'MESSAGE_RECEIVED',
+])
 
 function isObject(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null
@@ -56,6 +61,14 @@ function normalizeMessageStatus(value: unknown): string | null {
   return null
 }
 
+function normalizeEventName(value: unknown) {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
 function extractRecords(payload: Record<string, any>) {
   if (Array.isArray(payload.data)) return payload.data
   if (Array.isArray(payload.messages)) return payload.messages
@@ -67,7 +80,16 @@ function extractRecords(payload: Record<string, any>) {
 }
 
 function extractMessageId(record: Record<string, any>) {
-  return record.key?.id ?? record.id ?? record.messageId ?? null
+  return (
+    record.key?.id ??
+    record.keyId ??
+    record.data?.key?.id ??
+    record.data?.keyId ??
+    record.message?.key?.id ??
+    record.messageId ??
+    record.id ??
+    null
+  )
 }
 
 function extractMessageText(record: Record<string, any>) {
@@ -91,12 +113,36 @@ function extractRemoteJid(record: Record<string, any>) {
   )
 }
 
+function toBoolean(value: unknown) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value === 1
+  if (typeof value === 'string') {
+    const normalized = value.toLowerCase().trim()
+    return normalized === 'true' || normalized === '1' || normalized === 'yes'
+  }
+
+  return false
+}
+
 function extractFromMe(record: Record<string, any>) {
-  return Boolean(
+  return toBoolean(
     record.key?.fromMe ??
       record.fromMe ??
       record.Info?.IsFromMe ??
       record.data?.key?.fromMe,
+  )
+}
+
+function extractStatusCandidate(payload: Record<string, any>, record: Record<string, any>) {
+  return (
+    record.update?.status ??
+    record.status ??
+    record.data?.status ??
+    record.data?.update?.status ??
+    payload.status ??
+    payload.state ??
+    payload.data?.status ??
+    payload.data?.update?.status
   )
 }
 
@@ -198,7 +244,7 @@ async function updateScheduledMessageStatus(messageId: string, nextStatus: strin
 export async function POST(request: NextRequest) {
   const token = request.headers.get('x-webhook-token') ?? ''
 
-  if (WEBHOOK_SECRET && token !== WEBHOOK_SECRET) {
+  if (!WEBHOOK_SECRET || !safeCompareSecrets(token, WEBHOOK_SECRET)) {
     return NextResponse.json(
       { success: false, error: 'Nao autorizado' },
       { status: 401 },
@@ -213,7 +259,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'JSON invalido' }, { status: 400 })
   }
 
-  const event = String(payload.event ?? payload.type ?? '').toUpperCase()
+  const event = normalizeEventName(payload.event ?? payload.type)
 
   try {
     if (event.includes('CONNECTION') || ['CONNECTED', 'LOGGEDOUT'].includes(event)) {
@@ -221,7 +267,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, handled: 'connection' })
     }
 
-    if (!['SEND_MESSAGE', 'MESSAGES_UPDATE', 'MESSAGES_UPSERT', 'MESSAGE_RECEIVED'].includes(event)) {
+    if (!MESSAGE_EVENTS.has(event)) {
       return NextResponse.json({ success: true, ignored: event || 'unknown' })
     }
 
@@ -251,12 +297,7 @@ export async function POST(request: NextRequest) {
       }
 
       const messageId = extractMessageId(record)
-      const nextStatus = normalizeMessageStatus(
-        record.update?.status ??
-          record.status ??
-          payload.status ??
-          payload.state,
-      )
+      const nextStatus = normalizeMessageStatus(extractStatusCandidate(payload, record))
 
       if (!messageId || !nextStatus) continue
 

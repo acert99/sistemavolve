@@ -432,5 +432,8 @@ declare module 'next-auth/jwt' {
     nome: string
     perfil: Perfil
     clienteId?: string
+    sessionId?: string
+    exp?: number
+    jti?: string
   }
 }

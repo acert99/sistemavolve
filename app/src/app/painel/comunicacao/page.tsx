@@ -208,16 +208,31 @@ function ComunicacaoPageContent() {
     setTemplateForm({ nome: '', categoria: '', conteudo: '' })
   }
 
-  async function handleConnectWhatsApp() {
+  async function handleConnectWhatsApp(confirmReset = false) {
     setConnecting(true)
     setQrCode(null)
     setQrError(null)
 
     try {
-      const res = await fetch('/api/communication/whatsapp/connect', { method: 'POST' })
+      const res = await fetch('/api/communication/whatsapp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmReset }),
+      })
       const data = await res.json()
 
       if (!data.success) {
+        if (res.status === 409 && data.code === 'RESET_CONFIRMATION_REQUIRED') {
+          const confirmed = window.confirm(
+            'A reconexao precisa resetar/recriar a instancia da Evolution. Isso pode invalidar a sessao atual do WhatsApp. Deseja continuar?',
+          )
+
+          if (confirmed) {
+            await handleConnectWhatsApp(true)
+          }
+          return
+        }
+
         throw new Error(data.error ?? 'Nao foi possivel iniciar a conexao')
       }
 
@@ -423,7 +438,7 @@ function ComunicacaoPageContent() {
               </div>
               <button
                 type="button"
-                onClick={handleConnectWhatsApp}
+                onClick={() => handleConnectWhatsApp()}
                 disabled={connecting}
                 className="btn-secondary"
               >

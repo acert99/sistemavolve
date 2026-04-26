@@ -187,11 +187,11 @@ vercel domains add volve.com.br
 
 ### 10. Senha inicial do admin
 
-O `init.sql` cria um usuário admin com:
-- **E-mail:** `admin@volve.com.br`
-- **Senha:** `Volve@2025`
+O usuário admin deve ser criado manualmente após o setup:
+- **E-mail padrão:** `admin@volve.com.br`
+- **Comando:** `npm run seed:admin`
 
-**⚠️ Troque a senha imediatamente após o primeiro login!**
+Defina `ADMIN_INITIAL_PASSWORD` no ambiente apenas para a execução do seed e remova a variável logo em seguida.
 
 Para criar novos usuários da equipe:
 ```sql
@@ -268,9 +268,32 @@ VALUES ('Nome Cliente', 'cliente@email.com', '$2b$12$...', 'cliente', 'UUID_DO_C
 
 ### Cron
 
-| Job                    | Rota                      | Schedule     |
-|------------------------|---------------------------|--------------|
-| Notificações cobranças | `/api/cron/cobrancas`     | Diário 9h    |
+Todos os endpoints de cron exigem:
+
+```http
+Authorization: Bearer <CRON_SECRET>
+```
+
+| Job                         | Rota                             | Schedule sugerido |
+|-----------------------------|----------------------------------|-------------------|
+| Notificações cobranças      | `/api/cron/cobrancas`            | Diário 9h         |
+| Mensagens agendadas         | `/api/cron/scheduled-messages`   | A cada 1-5 min    |
+| Follow-ups comerciais       | `/api/cron/follow-up`            | A cada 5-15 min   |
+
+Exemplo de crontab no VPS:
+
+```bash
+*/5 * * * * curl -fsS -H "Authorization: Bearer SEU_CRON_SECRET" \
+  https://app.volvemkt.com/api/cron/scheduled-messages >> /var/log/volve-scheduled-messages.log 2>&1
+
+*/10 * * * * curl -fsS -H "Authorization: Bearer SEU_CRON_SECRET" \
+  https://app.volvemkt.com/api/cron/follow-up >> /var/log/volve-follow-up.log 2>&1
+
+0 9 * * * curl -fsS -H "Authorization: Bearer SEU_CRON_SECRET" \
+  https://app.volvemkt.com/api/cron/cobrancas >> /var/log/volve-cobrancas.log 2>&1
+```
+
+Observação: não configure múltiplos schedulers para o mesmo endpoint sem necessidade. O cron de mensagens agendadas reserva mensagens antes do envio para reduzir risco de duplicidade, mas manter um único scheduler continua sendo a operação recomendada.
 
 ---
 

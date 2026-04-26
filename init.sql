@@ -430,17 +430,10 @@ CREATE TRIGGER set_updated_at_templates_mensagem   BEFORE UPDATE ON templates_me
 CREATE TRIGGER set_updated_at_mensagens_agendadas  BEFORE UPDATE ON mensagens_agendadas  FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 -- =============================================================================
--- Seed inicial â€” usuÃ¡rio admin da equipe
--- Senha padrÃ£o: Volve@2025 (bcrypt hash â€” TROQUE em produÃ§Ã£o!)
+-- Seed inicial
+-- O usuario admin agora deve ser criado manualmente via scripts/seed-admin.ts
+-- usando ADMIN_INITIAL_PASSWORD no ambiente de setup.
 -- =============================================================================
-INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES
-  (
-    'Admin Volve',
-    'admin@volve.com.br',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiNJsLtScIflsxExFQfFIU3P38Jm',
-    'equipe'
-  )
-ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO templates_mensagem (name, categoria, stage, content, is_active)
 SELECT *

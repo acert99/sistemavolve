@@ -22,9 +22,9 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Agendamento nao encontrado' }, { status: 404 })
     }
 
-    if (existente.status === 'sent') {
+    if (['processing', 'sent', 'delivered', 'read'].includes(existente.status)) {
       return NextResponse.json(
-        { success: false, error: 'Mensagens ja enviadas nao podem ser canceladas' },
+        { success: false, error: 'Mensagens em processamento ou ja enviadas nao podem ser canceladas' },
         { status: 409 },
       )
     }

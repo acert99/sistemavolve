@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { validateCronRequest } from '@/lib/security'
 import { ensureInstanceWebhookConfigured, sendTextMessage } from '@/lib/whatsapp'
 
 const BATCH_SIZE = 20
@@ -12,17 +13,15 @@ function normalizeInitialStatus(providerStatus: string | null, messageId: string
   if (['read', 'readself'].includes(normalized)) return 'read'
   if (['pending', 'processing', 'queued'].includes(normalized)) return 'processing'
 
-  return messageId ? 'processing' : 'sent'
+  return messageId ? 'sent' : 'processing'
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization') ?? ''
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const auth = await validateCronRequest(request)
+  if (!auth.ok) {
     return NextResponse.json(
-      { success: false, error: 'Nao autorizado' },
-      { status: 401 },
+      { success: false, error: auth.error },
+      { status: auth.status },
     )
   }
 
@@ -33,20 +32,12 @@ export async function GET(request: NextRequest) {
     }
 
     const agora = new Date()
-    const mensagens = await prisma.mensagemAgendada.findMany({
+    const mensagensPendentes = await prisma.mensagemAgendada.findMany({
       where: {
         status: 'scheduled',
         agendadoPara: { lte: agora },
       },
-      include: {
-        cliente: {
-          select: {
-            id: true,
-            nome: true,
-            whatsapp: true,
-          },
-        },
-      },
+      select: { id: true },
       orderBy: { agendadoPara: 'asc' },
       take: BATCH_SIZE,
     })
@@ -59,8 +50,41 @@ export async function GET(request: NextRequest) {
       semWhatsapp: 0,
     }
 
-    for (const mensagem of mensagens) {
+    for (const pendente of mensagensPendentes) {
+      const reserva = await prisma.mensagemAgendada.updateMany({
+        where: {
+          id: pendente.id,
+          status: 'scheduled',
+        },
+        data: {
+          status: 'processing',
+          mensagemErro: null,
+        },
+      })
+
+      if (reserva.count === 0) {
+        continue
+      }
+
       resultados.processadas++
+
+      const mensagem = await prisma.mensagemAgendada.findUnique({
+        where: { id: pendente.id },
+        include: {
+          cliente: {
+            select: {
+              id: true,
+              nome: true,
+              whatsapp: true,
+            },
+          },
+        },
+      })
+
+      if (!mensagem) {
+        resultados.falhas++
+        continue
+      }
 
       const whatsapp = mensagem.cliente.whatsapp?.trim()
       if (!whatsapp) {

@@ -1,15 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { ensureInstanceWebhookConfigured, getInstanceStatus, resetAndConnect } from '@/lib/whatsapp'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session || session.user.perfil !== 'equipe') {
     return NextResponse.json({ success: false, error: 'Nao autorizado' }, { status: 401 })
   }
 
   try {
+    const body = await request.json().catch(() => ({})) as { confirmReset?: boolean }
     const status = await getInstanceStatus()
     if (status.connected) {
       const webhook = await ensureInstanceWebhookConfigured()
@@ -21,6 +22,17 @@ export async function POST() {
           webhookError: webhook.error,
         },
       })
+    }
+
+    if (!body.confirmReset) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'A reconexao do WhatsApp precisa resetar a instancia atual. Confirme para continuar.',
+          code: 'RESET_CONFIRMATION_REQUIRED',
+        },
+        { status: 409 },
+      )
     }
 
     const { qrcode, error } = await resetAndConnect()

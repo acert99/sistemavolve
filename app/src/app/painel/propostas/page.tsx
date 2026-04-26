@@ -14,7 +14,12 @@ interface Proposta {
   token: string
   createdAt: string
   aceitoEm: string | null
-  cliente: { nome: string; email: string }
+  cliente: { nome: string; email: string } | null
+  lead: { name: string; email: string | null } | null
+}
+
+function getPropostaContato(proposta: Proposta) {
+  return proposta.cliente?.nome ?? proposta.lead?.name ?? 'Contato nao identificado'
 }
 
 const statusBadge: Record<string, string> = {
@@ -108,7 +113,7 @@ export default function PropostasPage() {
             <tbody>
               {propostas.map((proposta) => (
                 <tr key={proposta.id}>
-                  <td className="font-medium">{proposta.cliente.nome}</td>
+                  <td className="font-medium">{getPropostaContato(proposta)}</td>
                   <td>{proposta.titulo}</td>
                   <td className="font-semibold text-slate-900">
                     {new Intl.NumberFormat('pt-BR', {

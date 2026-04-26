@@ -41,9 +41,8 @@ evolution.volvemkt.com {
   }
 
   # Bloqueia acesso ao painel da Evolution em produção
-  # Descomente para restringir o manager web
-  # @block_manager path /manager/*
-  # respond @block_manager 403
+  @block_manager path /manager/*
+  respond @block_manager 403
 
   log {
     output file /var/log/caddy/evolution.volvemkt.com.log {

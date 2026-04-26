@@ -40,18 +40,28 @@ export default function PropostaPublicaClient({
   async function handleAcao(novoStatus: 'aceita' | 'recusada') {
     setLoading(true)
 
-    await fetch(`/api/propostas/${proposta.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: novoStatus,
-        feedback: comment.trim() || null,
-      }),
-    })
+    try {
+      const response = await fetch(`/api/propostas/public/${proposta.token}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: novoStatus,
+          feedback: comment.trim() || null,
+        }),
+      })
+      const data = await response.json().catch(() => null)
 
-    setDone(true)
-    setLoading(false)
-    setAction(null)
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error ?? 'Nao foi possivel registrar sua resposta')
+      }
+
+      setDone(true)
+      setAction(null)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Nao foi possivel registrar sua resposta')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

@@ -34,6 +34,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.claude/settings.local.json
+.claude/settings.local.*
 
 # Prisma
 app/prisma/generated/
@@ -41,3 +43,8 @@ app/prisma/generated/
 # Docker volumes (dados locais)
 postgres-data/
 redis-data/
+
+# Local agent/worktree artifacts
+.claude/worktrees/
+.playwright-cli/
+app/race-*.txt

@@ -30,6 +30,11 @@ class NormalizeReadlinkEisdirPlugin {
 const nextConfig = {
   output: 'standalone',
 
+  // Exposto no client (footer do painel) para identificar a versão em produção
+  env: {
+    NEXT_PUBLIC_APP_VERSION: require('./package.json').version,
+  },
+
   // Remove cabeçalho que expõe tecnologia usada
   poweredByHeader: false,
 

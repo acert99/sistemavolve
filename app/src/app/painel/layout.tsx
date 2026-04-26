@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo, useState, type ReactNode, type SVGProps } from 'react'
+
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? 'dev'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
@@ -26,13 +28,16 @@ type NavItem = {
   icon: (props: SVGProps<SVGSVGElement>) => ReactNode
 }
 
-const primaryNav: NavItem[] = [
+const overviewNav: NavItem[] = [
   {
     href: '/painel',
     label: 'Dashboard',
     description: 'Centro de comando',
     icon: DashboardIcon,
   },
+]
+
+const commercialNav: NavItem[] = [
   {
     href: '/painel/clientes',
     label: 'CRM',
@@ -44,24 +49,6 @@ const primaryNav: NavItem[] = [
     label: 'Comercial',
     description: 'Metricas e conversao',
     icon: CommercialIcon,
-  },
-  {
-    href: '/painel/tarefas',
-    label: 'Tarefas',
-    description: 'Fila de atencao',
-    icon: TasksIcon,
-  },
-  {
-    href: '/painel/comunicacao',
-    label: 'Comunicacao',
-    description: 'WhatsApp, templates e agenda',
-    icon: CommunicationIcon,
-  },
-  {
-    href: '/painel/aprovacoes',
-    label: 'Aprovacoes',
-    description: 'Revisoes e feedbacks',
-    icon: ApprovalIcon,
   },
   {
     href: '/painel/propostas',
@@ -83,7 +70,25 @@ const primaryNav: NavItem[] = [
   },
 ]
 
-const secondaryNav: NavItem[] = [
+const operationsNav: NavItem[] = [
+  {
+    href: '/painel/tarefas',
+    label: 'Tarefas',
+    description: 'Fila de atencao',
+    icon: TasksIcon,
+  },
+  {
+    href: '/painel/comunicacao',
+    label: 'Comunicacao',
+    description: 'WhatsApp, templates e agenda',
+    icon: CommunicationIcon,
+  },
+  {
+    href: '/painel/aprovacoes',
+    label: 'Aprovacoes',
+    description: 'Revisoes e feedbacks',
+    icon: ApprovalIcon,
+  },
   {
     href: '/painel/servicos',
     label: 'Servicos',
@@ -154,7 +159,7 @@ export default function PainelLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const activeItem = useMemo(() => {
-    const allItems = [...primaryNav, ...secondaryNav]
+    const allItems = [...overviewNav, ...commercialNav, ...operationsNav]
     return allItems.find((item) =>
       item.href === '/painel' ? pathname === '/painel' : pathname.startsWith(item.href),
     )
@@ -194,14 +199,20 @@ export default function PainelLayout({ children }: { children: ReactNode }) {
 
         <div className="mt-6 flex-1 space-y-6 overflow-y-auto pr-1">
           <NavSection
-            title="Operacao"
-            items={primaryNav}
+            title="Visao geral"
+            items={overviewNav}
             pathname={pathname}
             onNavigate={() => setSidebarOpen(false)}
           />
           <NavSection
-            title="Base"
-            items={secondaryNav}
+            title="Comercial"
+            items={commercialNav}
+            pathname={pathname}
+            onNavigate={() => setSidebarOpen(false)}
+          />
+          <NavSection
+            title="Operacional"
+            items={operationsNav}
             pathname={pathname}
             onNavigate={() => setSidebarOpen(false)}
           />
@@ -224,6 +235,10 @@ export default function PainelLayout({ children }: { children: ReactNode }) {
             <LogoutIcon className="h-4 w-4" />
             Sair
           </button>
+
+          <p className="mt-3 text-center text-[11px] text-white/35">
+            Versao {APP_VERSION}
+          </p>
         </div>
       </aside>
 

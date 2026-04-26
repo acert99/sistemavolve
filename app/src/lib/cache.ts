@@ -6,13 +6,14 @@ declare global {
 }
 
 const REDIS_URL = process.env.REDIS_URL
+const SESSION_BLOCKLIST_PREFIX = 'auth:blocklist:'
 let redisWarningShown = false
 
 function logRedisWarning(error: unknown) {
   if (redisWarningShown) return
 
   redisWarningShown = true
-  console.warn('[Cache] Redis indisponivel, seguindo sem cache:', error)
+  console.warn('[Redis] Redis indisponivel, algumas protecoes e caches ficaram degradados:', error)
 }
 
 async function getRedisClient() {
@@ -37,6 +38,77 @@ async function getRedisClient() {
   } catch (error) {
     logRedisWarning(error)
     return null
+  }
+}
+
+export async function revokeBlockedSession(
+  sessionId: string,
+  expiresAtEpochSeconds: number,
+): Promise<boolean> {
+  const client = await getRedisClient()
+  if (!client) return false
+
+  const ttlSeconds = Math.max(
+    1,
+    Math.ceil(expiresAtEpochSeconds - Date.now() / 1000),
+  )
+
+  try {
+    await client.set(
+      `${SESSION_BLOCKLIST_PREFIX}${sessionId}`,
+      '1',
+      'EX',
+      ttlSeconds,
+    )
+    return true
+  } catch (error) {
+    logRedisWarning(error)
+    return false
+  }
+}
+
+export async function isBlockedSession(sessionId: string): Promise<boolean> {
+  const client = await getRedisClient()
+  if (!client) return false
+
+  try {
+    return (await client.exists(`${SESSION_BLOCKLIST_PREFIX}${sessionId}`)) === 1
+  } catch (error) {
+    logRedisWarning(error)
+    return false
+  }
+}
+
+export async function incrementCounter(
+  key: string,
+  ttlSeconds: number,
+): Promise<number | null> {
+  const client = await getRedisClient()
+  if (!client) return null
+
+  try {
+    const count = await client.incr(key)
+
+    if (count === 1) {
+      await client.expire(key, Math.max(1, ttlSeconds))
+    }
+
+    return count
+  } catch (error) {
+    logRedisWarning(error)
+    return null
+  }
+}
+
+export async function deleteKey(key: string): Promise<number> {
+  const client = await getRedisClient()
+  if (!client) return 0
+
+  try {
+    return await client.del(key)
+  } catch (error) {
+    logRedisWarning(error)
+    return 0
   }
 }
 

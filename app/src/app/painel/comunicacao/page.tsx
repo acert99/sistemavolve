@@ -113,6 +113,9 @@ function ComunicacaoPageContent() {
   const [connecting, setConnecting] = useState(false)
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [qrError, setQrError] = useState<string | null>(null)
+  const [connectNumber, setConnectNumber] = useState('')
+  const [pairingCode, setPairingCode] = useState<string | null>(null)
+  const [pairingDetails, setPairingDetails] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [executorNotice, setExecutorNotice] = useState(
     'Os agendamentos ficam persistidos e podem ser editados. O painel valida a configuracao do executor automaticamente.',
@@ -212,12 +215,14 @@ function ComunicacaoPageContent() {
     setConnecting(true)
     setQrCode(null)
     setQrError(null)
+    setPairingCode(null)
+    setPairingDetails(null)
 
     try {
       const res = await fetch('/api/communication/whatsapp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirmReset }),
+        body: JSON.stringify({ confirmReset, number: connectNumber || null }),
       })
       const data = await res.json()
 
@@ -252,8 +257,13 @@ function ComunicacaoPageContent() {
           setQrCode(null)
           fetchData()
         }, 60000)
+      } else if (data.data?.pairingCode) {
+        setPairingCode(data.data.pairingCode)
+        setPairingDetails(data.data?.code ? `code=${data.data.code}` : null)
       } else if (data.data?.error) {
         setQrError(data.data.error)
+      } else {
+        setQrError('Nao foi possivel obter QR/pairing code. Informe o numero (com DDI) e tente novamente.')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao abrir conexao do WhatsApp')
@@ -436,14 +446,25 @@ function ComunicacaoPageContent() {
                   O produto agora reflete a verdade do canal. Se a instancia ainda nao esta pronta, a interface deixa isso claro e evita fingir envio automatico.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => handleConnectWhatsApp()}
-                disabled={connecting}
-                className="btn-secondary"
-              >
-                {connecting ? 'Abrindo conexao...' : 'Conectar WhatsApp'}
-              </button>
+              <div className="grid w-full gap-3 rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 md:grid-cols-[1fr,auto] md:items-end">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-700">Numero para pareamento (com DDI)</span>
+                  <input
+                    value={connectNumber}
+                    onChange={(event) => setConnectNumber(event.target.value)}
+                    placeholder="Ex: +55 11 91234-5678"
+                    className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleConnectWhatsApp()}
+                  disabled={connecting}
+                  className="btn-secondary"
+                >
+                  {connecting ? 'Abrindo conexao...' : 'Conectar WhatsApp'}
+                </button>
+              </div>
             </div>
 
             {qrCode ? (
@@ -459,6 +480,15 @@ function ComunicacaoPageContent() {
                 <p className="text-xs text-emerald-700">
                   O QR code expira em 60 segundos. O painel atualiza automaticamente apos a leitura.
                 </p>
+              </div>
+            ) : pairingCode ? (
+              <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 p-6">
+                <p className="text-sm font-semibold text-emerald-900">Codigo de pareamento</p>
+                <p className="mt-2 text-3xl font-bold tracking-widest text-emerald-900">{pairingCode}</p>
+                <p className="mt-3 text-xs text-emerald-800">
+                  No WhatsApp (celular): Dispositivos conectados → Conectar um dispositivo → Vincular com numero.
+                </p>
+                {pairingDetails ? <p className="mt-2 text-[11px] text-emerald-700">{pairingDetails}</p> : null}
               </div>
             ) : qrError ? (
               <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

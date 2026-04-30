@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma'
 import { monthSlotsMonWedFri, newBatchId, slugifyClientName, validateMonthRef } from '@/lib/content-calendar-ideas'
 import { findClickUpListForClient } from '@/lib/client-reports'
 import { getISOWeek, getISOWeekYear } from 'date-fns'
+import { geminiGenerateJson } from '@/lib/gemini'
 
 type ClickUpTask = {
   id: string
@@ -14,6 +15,7 @@ type ClickUpTask = {
     type?: string
   }
   due_date?: string | null
+  tags?: Array<{ name?: string }>
 }
 
 function normalizeStatus(value: string | null | undefined) {
@@ -36,6 +38,60 @@ function weekKey(date: Date) {
   const year = getISOWeekYear(date)
   const week = String(getISOWeek(date)).padStart(2, '0')
   return `${year}-W${week}`
+}
+
+type ContentFormat = 'reels' | 'carrossel'
+
+function detectFormatFromTask(task: ClickUpTask): ContentFormat | null {
+  const name = normalizeStatus(task.name)
+  const tags = new Set((task.tags ?? []).map((tag) => normalizeStatus(tag.name)))
+  const all = `${name} ${[...tags].join(' ')}`
+  if (all.includes('reels') || all.includes('reel') || all.includes('video') || all.includes('vídeo')) {
+    return 'reels'
+  }
+  if (all.includes('carrossel') || all.includes('carousel') || all.includes('card') || all.includes('estatico') || all.includes('estático')) {
+    return 'carrossel'
+  }
+  return null
+}
+
+function nextFormat(previous: ContentFormat | null): ContentFormat {
+  return previous === 'reels' ? 'carrossel' : 'reels'
+}
+
+async function generateIdeaWithGemini(options: {
+  clientName: string
+  monthRef: string
+  dateIso: string
+  format: ContentFormat
+  existingTitles: string[]
+}) {
+  const prompt = `Voce esta ajudando a criar um planejamento de conteudo para o Instagram de um cliente.
+
+CLIENTE: ${options.clientName}
+DATA DO POST: ${options.dateIso} (YYYY-MM-DD)
+MES: ${options.monthRef}
+FORMATO OBRIGATORIO: ${options.format === 'reels' ? 'REELS (video curto)' : 'POST ESTATICO (card/carrossel)'}
+
+JA EXISTE NA SEMANA (nao repetir o mesmo tema):
+${options.existingTitles.length ? options.existingTitles.map((t) => `- ${t}`).join('\n') : '- (nenhum)'}
+
+Gere 1 ideia completa e pratica. Responda APENAS com JSON valido com estas chaves:
+{"theme":string,"hook":string,"format":string,"cta":string,"notes":string}
+
+Regras:
+- theme: tema curto e claro
+- hook: primeira frase forte (curta)
+- format: use exatamente "reels" ou "carrossel"
+- cta: chamada para acao
+- notes: roteiro/estrutura (bullet points). Para carrossel, sugerir 6-8 cards. Para reels, roteiro de 20-30s.
+`
+
+  return geminiGenerateJson<{ theme: string; hook: string; format: string; cta: string; notes: string }>({
+    prompt,
+    timeoutMs: 25_000,
+    maxOutputTokens: 700,
+  })
 }
 
 async function fetchClickUpListTasks(listId: string): Promise<ClickUpTask[]> {
@@ -139,6 +195,8 @@ export async function POST(request: NextRequest) {
   //    Regra: max 3 ideias por semana (tarefas abertas no ClickUp + geradas).
   const fixedDates = new Set<string>()
   const fixedOpenCountByWeek = new Map<string, number>()
+  const fixedOpenTitlesByWeek = new Map<string, string[]>()
+  const fixedOpenFormatsByWeek = new Map<string, ContentFormat | null>()
   let fixedCreated = 0
   const { start, end } = monthBounds(monthRef)
   try {
@@ -169,6 +227,18 @@ export async function POST(request: NextRequest) {
       fixedOpen.forEach((f) => {
         const key = weekKey(f.due)
         fixedOpenCountByWeek.set(key, (fixedOpenCountByWeek.get(key) ?? 0) + 1)
+
+        const titles = fixedOpenTitlesByWeek.get(key) ?? []
+        titles.push(f.task.name)
+        fixedOpenTitlesByWeek.set(key, titles)
+
+        // tenta inferir o formato predominante a partir das tarefas existentes
+        const detected = detectFormatFromTask(f.task)
+        if (detected) {
+          fixedOpenFormatsByWeek.set(key, detected)
+        } else if (!fixedOpenFormatsByWeek.has(key)) {
+          fixedOpenFormatsByWeek.set(key, null)
+        }
       })
 
       const createdFixed = await prisma.contentCalendarIdea.createMany({
@@ -223,6 +293,7 @@ export async function POST(request: NextRequest) {
     hook: string
     format: string
     cta: string
+    notes?: string | null
   }> = []
 
   for (const [week, weekSlots] of slotsByWeek.entries()) {
@@ -231,7 +302,29 @@ export async function POST(request: NextRequest) {
     if (remaining === 0) continue
 
     weekSlots.sort((a, b) => a.slot.date.localeCompare(b.slot.date))
-    weekSlots.slice(0, remaining).forEach((item) => {
+
+    // alternancia reels <-> carrossel
+    let previous = fixedOpenFormatsByWeek.get(week) ?? null
+    const existingTitles = fixedOpenTitlesByWeek.get(week) ?? []
+
+    for (const item of weekSlots.slice(0, remaining)) {
+      const format = nextFormat(previous)
+      previous = format
+
+      // gera conteudo real; se falhar, cai no placeholder (sem quebrar a UX)
+      let generated: { theme: string; hook: string; format: string; cta: string; notes: string } | null = null
+      try {
+        generated = await generateIdeaWithGemini({
+          clientName: client.nome,
+          monthRef,
+          dateIso: item.slot.date,
+          format,
+          existingTitles,
+        })
+      } catch (err) {
+        console.warn('[CalendarioConteudo] Gemini falhou, usando placeholder')
+      }
+
       toCreate.push({
         clientId,
         clientSlug,
@@ -240,12 +333,13 @@ export async function POST(request: NextRequest) {
         batchId: batchId ?? undefined,
         source: 'generated',
         status: 'pending',
-        theme: 'a definir',
-        hook: 'a definir',
-        format: 'a definir',
-        cta: 'a definir',
+        theme: generated?.theme?.slice(0, 140) ?? 'a definir',
+        hook: generated?.hook?.slice(0, 220) ?? 'a definir',
+        format: format,
+        cta: generated?.cta?.slice(0, 220) ?? 'a definir',
+        notes: generated?.notes?.slice(0, 2000) ?? null,
       })
-    })
+    }
   }
 
   const created = await prisma.contentCalendarIdea.createMany({ data: toCreate })

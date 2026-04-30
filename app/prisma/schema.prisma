@@ -16,12 +16,12 @@ datasource db {
 // Usuarios (autenticacao NextAuth + perfis)
 // =============================================================================
 model Usuario {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   nome      String
   email     String   @unique
   senhaHash String?  @map("senha_hash")
   perfil    Perfil   @default(equipe)
-  clienteId String?  @map("cliente_id")
+  clienteId String?  @map("cliente_id") @db.Uuid
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -43,7 +43,7 @@ enum Perfil {
 // Clientes
 // =============================================================================
 model Cliente {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   nome      String
   email     String   @unique
   whatsapp  String?
@@ -73,8 +73,8 @@ model Cliente {
 // Relatorios por cliente (historico semanal/mensal)
 // =============================================================================
 model ClientReport {
-  id            String             @id @default(uuid())
-  clientId      String             @map("client_id")
+  id            String             @id @default(uuid()) @db.Uuid
+  clientId      String             @map("client_id") @db.Uuid
   type          ClientReportType
   periodStart   DateTime           @map("period_start") @db.Date
   periodEnd     DateTime           @map("period_end") @db.Date
@@ -104,8 +104,8 @@ model ClientReport {
 }
 
 model ClientReportMetric {
-  id                String             @id @default(uuid())
-  reportId          String             @map("report_id")
+  id                String             @id @default(uuid()) @db.Uuid
+  reportId          String             @map("report_id") @db.Uuid
   metricKey         String             @map("metric_key")
   label             String
   value             Decimal?           @db.Decimal(14, 4)
@@ -125,8 +125,8 @@ model ClientReportMetric {
 }
 
 model ClientReportItem {
-  id            String               @id @default(uuid())
-  reportId      String               @map("report_id")
+  id            String               @id @default(uuid()) @db.Uuid
+  reportId      String               @map("report_id") @db.Uuid
   type          ClientReportItemType
   title         String
   description   String?
@@ -148,8 +148,8 @@ model ClientReportItem {
 }
 
 model ClientReportAsset {
-  id        String                @id @default(uuid())
-  reportId  String                @map("report_id")
+  id        String                @id @default(uuid()) @db.Uuid
+  reportId  String                @map("report_id") @db.Uuid
   type      ClientReportAssetType
   filename  String
   path      String
@@ -163,8 +163,8 @@ model ClientReportAsset {
 }
 
 model ClientReportProfile {
-  id                String                  @id @default(uuid())
-  clientId          String                  @unique @map("client_id")
+  id                String                  @id @default(uuid()) @db.Uuid
+  clientId          String                  @unique @map("client_id") @db.Uuid
   reportTone        String?                 @map("report_tone")
   serviceType       ClientReportServiceType @default(content) @map("service_type")
   promisedFrequency Int?                    @map("promised_frequency")
@@ -243,8 +243,8 @@ enum ContentCalendarIdeaStatus {
 }
 
 model ContentCalendarIdea {
-  id            String                    @id @default(uuid())
-  clientId      String                    @map("client_id")
+  id            String                    @id @default(uuid()) @db.Uuid
+  clientId      String                    @map("client_id") @db.Uuid
   clientSlug    String                    @map("client_slug")
   monthRef      String                    @map("month_ref") // YYYY-MM
   dayRef        DateTime                  @map("day_ref") @db.Date
@@ -316,8 +316,8 @@ enum CalendarioIdeiaStatus {
 }
 
 model CalendarioIdeia {
-  id            String                @id @default(uuid())
-  clienteId     String                @map("cliente_id")
+  id            String                @id @default(uuid()) @db.Uuid
+  clienteId     String                @map("cliente_id") @db.Uuid
   monthKey      String                @map("month_key") // YYYY-MM
   title         String
   description   String?
@@ -339,7 +339,7 @@ model CalendarioIdeia {
 // Leads / CRM comercial
 // =============================================================================
 model Lead {
-  id               String     @id @default(uuid())
+  id               String     @id @default(uuid()) @db.Uuid
   name             String     @map("name")
   company          String?
   phone            String
@@ -348,7 +348,7 @@ model Lead {
   source           LeadSource @default(outro)
   referredBy       String?    @map("referred_by")
   stage            LeadStage  @default(new)
-  assignedTo       String?    @map("assigned_to")
+  assignedTo       String?    @map("assigned_to") @db.Uuid
   servicesInterest String[]   @default([]) @map("services_interest")
   estimatedValue   Decimal?   @map("estimated_value") @db.Decimal(10, 2)
   notes            String?
@@ -356,7 +356,7 @@ model Lead {
   nextActionDate   DateTime?  @map("next_action_date")
   lostReason       String?    @map("lost_reason")
   convertedAt      DateTime?  @map("converted_at")
-  clientId         String?    @unique @map("client_id")
+  clientId         String?    @unique @map("client_id") @db.Uuid
   stageChangedAt   DateTime   @default(now()) @map("stage_changed_at")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
@@ -375,12 +375,12 @@ model Lead {
 }
 
 model LeadTimeline {
-  id        String           @id @default(uuid())
-  leadId    String           @map("lead_id")
+  id        String           @id @default(uuid()) @db.Uuid
+  leadId    String           @map("lead_id") @db.Uuid
   type      LeadTimelineType
   content   String?
   metadata  Json?
-  createdBy String?          @map("created_by")
+  createdBy String?          @map("created_by") @db.Uuid
   createdAt DateTime         @default(now()) @map("created_at")
 
   lead    Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -391,8 +391,8 @@ model LeadTimeline {
 }
 
 model FollowUpJob {
-  id          String            @id @default(uuid())
-  leadId      String            @map("lead_id")
+  id          String            @id @default(uuid()) @db.Uuid
+  leadId      String            @map("lead_id") @db.Uuid
   type        String
   scheduledAt DateTime          @map("scheduled_at")
   sentAt      DateTime?         @map("sent_at")
@@ -413,7 +413,7 @@ model FollowUpJob {
 // Servicos (catalogo)
 // =============================================================================
 model Servico {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   nome      String
   descricao String?
   preco     Decimal  @default(0) @db.Decimal(12, 2)
@@ -431,9 +431,9 @@ model Servico {
 // Entregas (tarefas vinculadas ao ClickUp)
 // =============================================================================
 model Entrega {
-  id            String        @id @default(uuid())
-  clienteId     String        @map("cliente_id")
-  servicoId     String?       @map("servico_id")
+  id            String        @id @default(uuid()) @db.Uuid
+  clienteId     String        @map("cliente_id") @db.Uuid
+  servicoId     String?       @map("servico_id") @db.Uuid
   clickupTaskId String?       @map("clickup_task_id")
   titulo        String
   descricao     String?
@@ -461,9 +461,9 @@ enum StatusEntrega {
 // Aprovacoes
 // =============================================================================
 model Aprovacao {
-  id         String          @id @default(uuid())
-  entregaId  String          @map("entrega_id")
-  clienteId  String          @map("cliente_id")
+  id         String          @id @default(uuid()) @db.Uuid
+  entregaId  String          @map("entrega_id") @db.Uuid
+  clienteId  String          @map("cliente_id") @db.Uuid
   status     StatusAprovacao @default(aguardando)
   comentario String?
   aprovadoEm DateTime?       @map("aprovado_em")
@@ -486,9 +486,9 @@ enum StatusAprovacao {
 // Propostas
 // =============================================================================
 model Proposta {
-  id            String         @id @default(uuid())
-  clienteId     String?        @map("cliente_id")
-  leadId        String?        @map("lead_id")
+  id            String         @id @default(uuid()) @db.Uuid
+  clienteId     String?        @map("cliente_id") @db.Uuid
+  leadId        String?        @map("lead_id") @db.Uuid
   titulo        String
   descricao     String?
   itens         Json           @default("[]")
@@ -523,9 +523,9 @@ enum StatusProposta {
 // Contratos (Autentique)
 // =============================================================================
 model Contrato {
-  id             String         @id @default(uuid())
-  clienteId      String         @map("cliente_id")
-  propostaId     String?        @map("proposta_id")
+  id             String         @id @default(uuid()) @db.Uuid
+  clienteId      String         @map("cliente_id") @db.Uuid
+  propostaId     String?        @map("proposta_id") @db.Uuid
   autentiqueId   String?        @map("autentique_id")
   titulo         String
   conteudo       String?
@@ -554,9 +554,9 @@ enum StatusContrato {
 // Cobrancas (Asaas)
 // =============================================================================
 model Cobranca {
-  id            String    @id @default(uuid())
-  clienteId     String    @map("cliente_id")
-  contratoId    String?   @map("contrato_id")
+  id            String    @id @default(uuid()) @db.Uuid
+  clienteId     String    @map("cliente_id") @db.Uuid
+  contratoId    String?   @map("contrato_id") @db.Uuid
   asaasId       String?   @map("asaas_id")
   descricao     String
   valor         Decimal   @db.Decimal(12, 2)
@@ -581,7 +581,7 @@ model Cobranca {
 // Comunicacao (WhatsApp, templates e mensagens agendadas)
 // =============================================================================
 model CanalWhatsApp {
-  id               String    @id @default(uuid())
+  id               String    @id @default(uuid()) @db.Uuid
   provider         String    @default("evolution")
   instanceName     String    @map("instance_name")
   status           String    @default("disconnected")
@@ -596,7 +596,7 @@ model CanalWhatsApp {
 }
 
 model TemplateMensagem {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   nome      String   @map("name")
   categoria String?
   stage     String?  @map("stage")
@@ -611,17 +611,17 @@ model TemplateMensagem {
 }
 
 model MensagemAgendada {
-  id                String    @id @default(uuid())
-  clienteId         String    @map("cliente_id")
+  id                String    @id @default(uuid()) @db.Uuid
+  clienteId         String    @map("cliente_id") @db.Uuid
   canal             String    @default("whatsapp") @map("channel")
-  templateId        String?   @map("template_id")
+  templateId        String?   @map("template_id") @db.Uuid
   conteudoMensagem  String    @map("message_content")
   agendadoPara      DateTime  @map("scheduled_for")
   status            String    @default("scheduled")
   externalMessageId String?   @map("external_message_id")
   enviadoEm         DateTime? @map("sent_at")
   mensagemErro      String?   @map("error_message")
-  createdBy         String    @map("created_by")
+  createdBy         String    @map("created_by") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 

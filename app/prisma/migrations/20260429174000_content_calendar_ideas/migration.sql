@@ -2,8 +2,8 @@ CREATE TYPE "ContentCalendarIdeaSource" AS ENUM ('clickup', 'generated', 'manual
 CREATE TYPE "ContentCalendarIdeaStatus" AS ENUM ('pending', 'approved', 'rejected');
 
 CREATE TABLE "content_calendar_ideas" (
-  "id" TEXT NOT NULL,
-  "client_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "client_id" UUID NOT NULL,
   "client_slug" TEXT NOT NULL,
   "month_ref" TEXT NOT NULL,
   "day_ref" DATE NOT NULL,

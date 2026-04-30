@@ -6,8 +6,8 @@ CREATE TYPE "ClientReportSource" AS ENUM ('manual', 'clickup', 'api');
 CREATE TYPE "ClientReportServiceType" AS ENUM ('content', 'paid_traffic', 'medical', 'institutional', 'event', 'custom');
 
 CREATE TABLE "client_reports" (
-  "id" TEXT NOT NULL,
-  "client_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "client_id" UUID NOT NULL,
   "type" "ClientReportType" NOT NULL,
   "period_start" DATE NOT NULL,
   "period_end" DATE NOT NULL,
@@ -29,8 +29,8 @@ CREATE TABLE "client_reports" (
 );
 
 CREATE TABLE "client_report_metrics" (
-  "id" TEXT NOT NULL,
-  "report_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "report_id" UUID NOT NULL,
   "metric_key" TEXT NOT NULL,
   "label" TEXT NOT NULL,
   "value" DECIMAL(14,4),
@@ -46,8 +46,8 @@ CREATE TABLE "client_report_metrics" (
 );
 
 CREATE TABLE "client_report_items" (
-  "id" TEXT NOT NULL,
-  "report_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "report_id" UUID NOT NULL,
   "type" "ClientReportItemType" NOT NULL,
   "title" TEXT NOT NULL,
   "description" TEXT,
@@ -64,8 +64,8 @@ CREATE TABLE "client_report_items" (
 );
 
 CREATE TABLE "client_report_assets" (
-  "id" TEXT NOT NULL,
-  "report_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "report_id" UUID NOT NULL,
   "type" "ClientReportAssetType" NOT NULL,
   "filename" TEXT NOT NULL,
   "path" TEXT NOT NULL,
@@ -75,8 +75,8 @@ CREATE TABLE "client_report_assets" (
 );
 
 CREATE TABLE "client_report_profiles" (
-  "id" TEXT NOT NULL,
-  "client_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "client_id" UUID NOT NULL,
   "report_tone" TEXT,
   "service_type" "ClientReportServiceType" NOT NULL DEFAULT 'content',
   "promised_frequency" INTEGER,

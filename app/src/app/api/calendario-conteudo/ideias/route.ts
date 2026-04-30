@@ -4,11 +4,38 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { monthSlotsMonWedFri, newBatchId, slugifyClientName, validateMonthRef } from '@/lib/content-calendar-ideas'
 import { findClickUpListForClient } from '@/lib/client-reports'
+import { getISOWeek, getISOWeekYear } from 'date-fns'
 
 type ClickUpTask = {
   id: string
   name: string
+  status?: {
+    status?: string
+    type?: string
+  }
   due_date?: string | null
+}
+
+function normalizeStatus(value: string | null | undefined) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function isOpenTask(task: ClickUpTask) {
+  const type = normalizeStatus(task.status?.type)
+  const status = normalizeStatus(task.status?.status)
+  if (type === 'closed') return false
+  if (status === 'publicado') return false
+  return true
+}
+
+function weekKey(date: Date) {
+  const year = getISOWeekYear(date)
+  const week = String(getISOWeek(date)).padStart(2, '0')
+  return `${year}-W${week}`
 }
 
 async function fetchClickUpListTasks(listId: string): Promise<ClickUpTask[]> {
@@ -109,7 +136,9 @@ export async function POST(request: NextRequest) {
   const slots = monthSlotsMonWedFri(monthRef)
 
   // 1) Fixas (ClickUp): tasks com due_date no mês alvo.
+  //    Regra: max 3 ideias por semana (tarefas abertas no ClickUp + geradas).
   const fixedDates = new Set<string>()
+  const fixedOpenCountByWeek = new Map<string, number>()
   let fixedCreated = 0
   const { start, end } = monthBounds(monthRef)
   try {
@@ -127,14 +156,23 @@ export async function POST(request: NextRequest) {
           const mm = String(date.getUTCMonth() + 1).padStart(2, '0')
           const dd = String(date.getUTCDate()).padStart(2, '0')
           const iso = `${yyyy}-${mm}-${dd}`
-          return { iso, task: t }
+          return { iso, task: t, due: date }
         })
-        .filter(Boolean) as Array<{ iso: string; task: ClickUpTask }>
+        .filter(Boolean) as Array<{ iso: string; task: ClickUpTask; due: Date }>
 
-      fixed.forEach((f) => fixedDates.add(f.iso))
+      // para planejamento, so consideramos tarefas abertas (nao PUBLICADO/closed)
+      const fixedOpen = fixed.filter((f) => isOpenTask(f.task))
+
+      fixedOpen.forEach((f) => fixedDates.add(f.iso))
+
+      // Conta por semana apenas tarefas abertas (nao closed e nao PUBLICADO)
+      fixedOpen.forEach((f) => {
+        const key = weekKey(f.due)
+        fixedOpenCountByWeek.set(key, (fixedOpenCountByWeek.get(key) ?? 0) + 1)
+      })
 
       const createdFixed = await prisma.contentCalendarIdea.createMany({
-        data: fixed.map((f) => ({
+        data: fixedOpen.map((f) => ({
           clientId,
           clientSlug,
           monthRef,
@@ -156,22 +194,59 @@ export async function POST(request: NextRequest) {
     console.warn('[POST /api/calendario-conteudo/ideias] ClickUp sync falhou:', err)
   }
 
-  // 2) Ideias geradas: preencher slots Seg/Qua/Sex que não estão ocupados por fixas
-  const toCreate = slots
+  // 2) Ideias geradas: preencher slots Seg/Qua/Sex respeitando max 3 por semana.
+  //    Se ja existir 1 tarefa aberta no ClickUp na semana, gerar so mais 2, etc.
+  const candidateSlots = slots
     .filter((slot) => !fixedDates.has(slot.date))
     .map((slot) => ({
-      clientId,
-      clientSlug,
-      monthRef,
-      dayRef: new Date(`${slot.date}T00:00:00`),
-      batchId: batchId ?? undefined,
-      source: 'generated' as const,
-      status: 'pending' as const,
-      theme: 'a definir',
-      hook: 'a definir',
-      format: 'a definir',
-      cta: 'a definir',
+      slot,
+      dateObj: new Date(`${slot.date}T00:00:00Z`),
     }))
+
+  const slotsByWeek = candidateSlots.reduce((acc, item) => {
+    const key = weekKey(item.dateObj)
+    const list = acc.get(key) ?? []
+    list.push(item)
+    acc.set(key, list)
+    return acc
+  }, new Map<string, Array<{ slot: { date: string }; dateObj: Date }>>())
+
+  const toCreate: Array<{
+    clientId: string
+    clientSlug: string
+    monthRef: string
+    dayRef: Date
+    batchId?: string
+    source: 'generated'
+    status: 'pending'
+    theme: string
+    hook: string
+    format: string
+    cta: string
+  }> = []
+
+  for (const [week, weekSlots] of slotsByWeek.entries()) {
+    const already = fixedOpenCountByWeek.get(week) ?? 0
+    const remaining = Math.max(0, 3 - already)
+    if (remaining === 0) continue
+
+    weekSlots.sort((a, b) => a.slot.date.localeCompare(b.slot.date))
+    weekSlots.slice(0, remaining).forEach((item) => {
+      toCreate.push({
+        clientId,
+        clientSlug,
+        monthRef,
+        dayRef: new Date(`${item.slot.date}T00:00:00`),
+        batchId: batchId ?? undefined,
+        source: 'generated',
+        status: 'pending',
+        theme: 'a definir',
+        hook: 'a definir',
+        format: 'a definir',
+        cta: 'a definir',
+      })
+    })
+  }
 
   const created = await prisma.contentCalendarIdea.createMany({ data: toCreate })
   return NextResponse.json({ success: true, data: { created: created.count, fixedCreated, batchId, clientSlug } }, { status: 201 })

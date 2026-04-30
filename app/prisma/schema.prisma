@@ -16,15 +16,15 @@ datasource db {
 // Usuarios (autenticacao NextAuth + perfis)
 // =============================================================================
 model Usuario {
-  id               String             @id @default(uuid())
-  nome             String
-  email            String             @unique
-  senhaHash        String?            @map("senha_hash")
-  perfil           Perfil             @default(equipe)
-  clienteId        String?            @map("cliente_id")
-  ativo            Boolean            @default(true)
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senhaHash String?  @map("senha_hash")
+  perfil    Perfil   @default(equipe)
+  clienteId String?  @map("cliente_id")
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   cliente          Cliente?           @relation(fields: [clienteId], references: [id])
   mensagensCriadas MensagemAgendada[] @relation("MensagemAgendadaCriador")
@@ -43,26 +43,232 @@ enum Perfil {
 // Clientes
 // =============================================================================
 model Cliente {
-  id                 String             @id @default(uuid())
-  nome               String
-  email              String             @unique
-  whatsapp           String?
-  cpfCnpj            String?            @unique @map("cpf_cnpj")
-  asaasId            String?            @map("asaas_id")
-  ativo              Boolean            @default(true)
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  whatsapp  String?
+  cpfCnpj   String?  @unique @map("cpf_cnpj")
+  asaasId   String?  @map("asaas_id")
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  usuarios           Usuario[]
-  entregas           Entrega[]
-  aprovacoes         Aprovacao[]
-  propostas          Proposta[]
-  contratos          Contrato[]
-  cobrancas          Cobranca[]
-  mensagensAgendadas MensagemAgendada[]
-  leadOrigem         Lead?              @relation("LeadClient")
+  usuarios             Usuario[]
+  entregas             Entrega[]
+  aprovacoes           Aprovacao[]
+  propostas            Proposta[]
+  contratos            Contrato[]
+  cobrancas            Cobranca[]
+  mensagensAgendadas   MensagemAgendada[]
+  leadOrigem           Lead?                 @relation("LeadClient")
+  reportProfile        ClientReportProfile?
+  reports              ClientReport[]
+  contentCalendarIdeas ContentCalendarIdea[]
+  calendarioIdeias     CalendarioIdeia[]
 
   @@map("clientes")
+}
+
+// =============================================================================
+// Relatorios por cliente (historico semanal/mensal)
+// =============================================================================
+model ClientReport {
+  id            String             @id @default(uuid())
+  clientId      String             @map("client_id")
+  type          ClientReportType
+  periodStart   DateTime           @map("period_start") @db.Date
+  periodEnd     DateTime           @map("period_end") @db.Date
+  monthRef      Int?               @map("month_ref")
+  yearRef       Int?               @map("year_ref")
+  status        ClientReportStatus @default(draft)
+  title         String
+  summary       String?
+  highlights    String?
+  risks         String?
+  nextSteps     String?            @map("next_steps")
+  internalNotes String?            @map("internal_notes")
+  reviewedAt    DateTime?          @map("reviewed_at")
+  approvedAt    DateTime?          @map("approved_at")
+  sentAt        DateTime?          @map("sent_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  cliente Cliente              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  metrics ClientReportMetric[]
+  items   ClientReportItem[]
+  assets  ClientReportAsset[]
+
+  @@index([clientId, type, periodStart])
+  @@index([status])
+  @@map("client_reports")
+}
+
+model ClientReportMetric {
+  id                String             @id @default(uuid())
+  reportId          String             @map("report_id")
+  metricKey         String             @map("metric_key")
+  label             String
+  value             Decimal?           @db.Decimal(14, 4)
+  previousValue     Decimal?           @map("previous_value") @db.Decimal(14, 4)
+  variationAbsolute Decimal?           @map("variation_absolute") @db.Decimal(14, 4)
+  variationPercent  Decimal?           @map("variation_percent") @db.Decimal(14, 4)
+  unit              String?
+  source            ClientReportSource @default(manual)
+  notes             String?
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  report ClientReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, metricKey])
+  @@map("client_report_metrics")
+}
+
+model ClientReportItem {
+  id            String               @id @default(uuid())
+  reportId      String               @map("report_id")
+  type          ClientReportItemType
+  title         String
+  description   String?
+  date          DateTime?            @db.Date
+  status        String?
+  source        ClientReportSource   @default(manual)
+  sourceTaskId  String?              @map("source_task_id")
+  sourceTaskUrl String?              @map("source_task_url")
+  contentUrl    String?              @map("content_url")
+  orderIndex    Int                  @default(0) @map("order_index")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  report ClientReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, type])
+  @@index([sourceTaskId])
+  @@map("client_report_items")
+}
+
+model ClientReportAsset {
+  id        String                @id @default(uuid())
+  reportId  String                @map("report_id")
+  type      ClientReportAssetType
+  filename  String
+  path      String
+  publicUrl String?               @map("public_url")
+  createdAt DateTime              @default(now()) @map("created_at")
+
+  report ClientReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, type])
+  @@map("client_report_assets")
+}
+
+model ClientReportProfile {
+  id                String                  @id @default(uuid())
+  clientId          String                  @unique @map("client_id")
+  reportTone        String?                 @map("report_tone")
+  serviceType       ClientReportServiceType @default(content) @map("service_type")
+  promisedFrequency Int?                    @map("promised_frequency")
+  mainChannels      String[]                @default([]) @map("main_channels")
+  primaryGoals      String[]                @default([]) @map("primary_goals")
+  importantNotes    String?                 @map("important_notes")
+  metricsEnabled    String[]                @default([]) @map("metrics_enabled")
+  templateVariant   String?                 @map("template_variant")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+
+  cliente Cliente @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_report_profiles")
+}
+
+enum ClientReportType {
+  weekly
+  monthly
+}
+
+enum ClientReportStatus {
+  draft
+  reviewed
+  approved
+  sent
+}
+
+enum ClientReportItemType {
+  published_content
+  pending_client
+  in_progress
+  highlight
+  risk
+  next_action
+  delayed
+  strategic_note
+}
+
+enum ClientReportAssetType {
+  markdown
+  pdf
+  json
+  image
+}
+
+enum ClientReportSource {
+  manual
+  clickup
+  api
+}
+
+enum ClientReportServiceType {
+  content
+  paid_traffic
+  medical
+  institutional
+  event
+  custom
+}
+
+// =============================================================================
+// Calendário de Conteúdo — Ideias (aprovação no app)
+// =============================================================================
+
+enum ContentCalendarIdeaSource {
+  clickup
+  generated
+  manual
+}
+
+enum ContentCalendarIdeaStatus {
+  pending
+  approved
+  rejected
+}
+
+model ContentCalendarIdea {
+  id            String                    @id @default(uuid())
+  clientId      String                    @map("client_id")
+  clientSlug    String                    @map("client_slug")
+  monthRef      String                    @map("month_ref") // YYYY-MM
+  dayRef        DateTime                  @map("day_ref") @db.Date
+  batchId       String?                   @map("batch_id")
+  source        ContentCalendarIdeaSource @default(generated)
+  status        ContentCalendarIdeaStatus @default(pending)
+  clickupTaskId String?                   @map("clickup_task_id")
+
+  theme  String? @map("theme")
+  hook   String? @map("hook")
+  format String? @map("format")
+  cta    String? @map("cta")
+  notes  String? @map("notes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  cliente Cliente @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, clickupTaskId])
+  @@index([clientId, monthRef])
+  @@index([clientId, monthRef, dayRef])
+  @@index([status])
+  @@map("content_calendar_ideas")
 }
 
 enum LeadSource {
@@ -100,36 +306,66 @@ enum FollowUpJobStatus {
 }
 
 // =============================================================================
+// Calendario de Conteudo — Ideias (MVP)
+// =============================================================================
+
+enum CalendarioIdeiaStatus {
+  draft
+  approved
+  rejected
+}
+
+model CalendarioIdeia {
+  id            String                @id @default(uuid())
+  clienteId     String                @map("cliente_id")
+  monthKey      String                @map("month_key") // YYYY-MM
+  title         String
+  description   String?
+  scheduledDate DateTime?             @map("scheduled_date") @db.Date
+  status        CalendarioIdeiaStatus @default(draft)
+  approvedAt    DateTime?             @map("approved_at")
+  rejectedAt    DateTime?             @map("rejected_at")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId, monthKey])
+  @@index([status])
+  @@map("calendario_ideias")
+}
+
+// =============================================================================
 // Leads / CRM comercial
 // =============================================================================
 model Lead {
-  id               String             @id @default(uuid())
-  name             String             @map("name")
+  id               String     @id @default(uuid())
+  name             String     @map("name")
   company          String?
   phone            String
   email            String?
   instagram        String?
-  source           LeadSource         @default(outro)
-  referredBy       String?            @map("referred_by")
-  stage            LeadStage          @default(new)
-  assignedTo       String?            @map("assigned_to")
-  servicesInterest String[]           @default([]) @map("services_interest")
-  estimatedValue   Decimal?           @map("estimated_value") @db.Decimal(10, 2)
+  source           LeadSource @default(outro)
+  referredBy       String?    @map("referred_by")
+  stage            LeadStage  @default(new)
+  assignedTo       String?    @map("assigned_to")
+  servicesInterest String[]   @default([]) @map("services_interest")
+  estimatedValue   Decimal?   @map("estimated_value") @db.Decimal(10, 2)
   notes            String?
-  nextAction       String?            @map("next_action")
-  nextActionDate   DateTime?          @map("next_action_date")
-  lostReason       String?            @map("lost_reason")
-  convertedAt      DateTime?          @map("converted_at")
-  clientId         String?            @unique @map("client_id")
-  stageChangedAt   DateTime           @default(now()) @map("stage_changed_at")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  nextAction       String?    @map("next_action")
+  nextActionDate   DateTime?  @map("next_action_date")
+  lostReason       String?    @map("lost_reason")
+  convertedAt      DateTime?  @map("converted_at")
+  clientId         String?    @unique @map("client_id")
+  stageChangedAt   DateTime   @default(now()) @map("stage_changed_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
 
-  assignee         Usuario?           @relation("LeadAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
-  client           Cliente?           @relation("LeadClient", fields: [clientId], references: [id], onDelete: SetNull)
-  timeline         LeadTimeline[]
-  followUpJobs     FollowUpJob[]
-  propostas        Proposta[]
+  assignee     Usuario?       @relation("LeadAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  client       Cliente?       @relation("LeadClient", fields: [clientId], references: [id], onDelete: SetNull)
+  timeline     LeadTimeline[]
+  followUpJobs FollowUpJob[]
+  propostas    Proposta[]
 
   @@index([stage])
   @@index([assignedTo])
@@ -139,34 +375,34 @@ model Lead {
 }
 
 model LeadTimeline {
-  id         String            @id @default(uuid())
-  leadId      String            @map("lead_id")
-  type       LeadTimelineType
-  content    String?
-  metadata   Json?
-  createdBy  String?           @map("created_by")
-  createdAt  DateTime          @default(now()) @map("created_at")
+  id        String           @id @default(uuid())
+  leadId    String           @map("lead_id")
+  type      LeadTimelineType
+  content   String?
+  metadata  Json?
+  createdBy String?          @map("created_by")
+  createdAt DateTime         @default(now()) @map("created_at")
 
-  lead       Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  creator    Usuario?          @relation("LeadTimelineCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  lead    Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  creator Usuario? @relation("LeadTimelineCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([leadId, createdAt])
   @@map("lead_timeline")
 }
 
 model FollowUpJob {
-  id           String            @id @default(uuid())
-  leadId        String            @map("lead_id")
-  type         String
-  scheduledAt  DateTime          @map("scheduled_at")
-  sentAt       DateTime?         @map("sent_at")
-  cancelledAt  DateTime?         @map("cancelled_at")
-  message      String
-  metadata     Json?
-  status       FollowUpJobStatus @default(pending)
-  createdAt    DateTime          @default(now()) @map("created_at")
+  id          String            @id @default(uuid())
+  leadId      String            @map("lead_id")
+  type        String
+  scheduledAt DateTime          @map("scheduled_at")
+  sentAt      DateTime?         @map("sent_at")
+  cancelledAt DateTime?         @map("cancelled_at")
+  message     String
+  metadata    Json?
+  status      FollowUpJobStatus @default(pending)
+  createdAt   DateTime          @default(now()) @map("created_at")
 
-  lead         Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([scheduledAt])
@@ -177,16 +413,16 @@ model FollowUpJob {
 // Servicos (catalogo)
 // =============================================================================
 model Servico {
-  id         String    @id @default(uuid())
-  nome       String
-  descricao  String?
-  preco      Decimal   @default(0) @db.Decimal(12, 2)
-  categoria  String?
-  ativo      Boolean   @default(true)
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  nome      String
+  descricao String?
+  preco     Decimal  @default(0) @db.Decimal(12, 2)
+  categoria String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  entregas   Entrega[]
+  entregas Entrega[]
 
   @@map("servicos")
 }
@@ -195,20 +431,20 @@ model Servico {
 // Entregas (tarefas vinculadas ao ClickUp)
 // =============================================================================
 model Entrega {
-  id             String        @id @default(uuid())
-  clienteId      String        @map("cliente_id")
-  servicoId      String?       @map("servico_id")
-  clickupTaskId  String?       @map("clickup_task_id")
-  titulo         String
-  descricao      String?
-  status         StatusEntrega @default(em_producao)
-  arquivoUrl     String?       @map("arquivo_url")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  clienteId     String        @map("cliente_id")
+  servicoId     String?       @map("servico_id")
+  clickupTaskId String?       @map("clickup_task_id")
+  titulo        String
+  descricao     String?
+  status        StatusEntrega @default(em_producao)
+  arquivoUrl    String?       @map("arquivo_url")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  cliente        Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  servico        Servico?     @relation(fields: [servicoId], references: [id], onDelete: SetNull)
-  aprovacoes     Aprovacao[]
+  cliente    Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  servico    Servico?    @relation(fields: [servicoId], references: [id], onDelete: SetNull)
+  aprovacoes Aprovacao[]
 
   @@map("entregas")
 }
@@ -225,17 +461,17 @@ enum StatusEntrega {
 // Aprovacoes
 // =============================================================================
 model Aprovacao {
-  id          String          @id @default(uuid())
-  entregaId   String          @map("entrega_id")
-  clienteId   String          @map("cliente_id")
-  status      StatusAprovacao @default(aguardando)
-  comentario  String?
-  aprovadoEm  DateTime?       @map("aprovado_em")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+  id         String          @id @default(uuid())
+  entregaId  String          @map("entrega_id")
+  clienteId  String          @map("cliente_id")
+  status     StatusAprovacao @default(aguardando)
+  comentario String?
+  aprovadoEm DateTime?       @map("aprovado_em")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
 
-  entrega     Entrega         @relation(fields: [entregaId], references: [id], onDelete: Cascade)
-  cliente     Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  entrega Entrega @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@map("aprovacoes")
 }
@@ -267,9 +503,9 @@ model Proposta {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
 
-  cliente       Cliente?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  lead          Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  contratos     Contrato[]
+  cliente   Cliente?   @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  lead      Lead?      @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  contratos Contrato[]
 
   @@map("propostas")
 }
@@ -300,9 +536,9 @@ model Contrato {
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
-  cliente        Cliente        @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  proposta       Proposta?      @relation(fields: [propostaId], references: [id], onDelete: SetNull)
-  cobrancas      Cobranca[]
+  cliente   Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  proposta  Proposta?  @relation(fields: [propostaId], references: [id], onDelete: SetNull)
+  cobrancas Cobranca[]
 
   @@map("contratos")
 }
@@ -318,25 +554,25 @@ enum StatusContrato {
 // Cobrancas (Asaas)
 // =============================================================================
 model Cobranca {
-  id             String    @id @default(uuid())
-  clienteId      String    @map("cliente_id")
-  contratoId     String?   @map("contrato_id")
-  asaasId        String?   @map("asaas_id")
-  descricao      String
-  valor          Decimal   @db.Decimal(12, 2)
-  vencimento     DateTime  @db.Date
-  tipo           String    @default("BOLETO")
-  status         String    @default("PENDING")
-  linkPagamento  String?   @map("link_pagamento")
-  invoiceUrl     String?   @map("invoice_url")
-  pixCopaCola    String?   @map("pix_copia_cola")
-  pagoEm         DateTime? @map("pago_em")
-  notificadoEm   DateTime? @map("notificado_em")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  clienteId     String    @map("cliente_id")
+  contratoId    String?   @map("contrato_id")
+  asaasId       String?   @map("asaas_id")
+  descricao     String
+  valor         Decimal   @db.Decimal(12, 2)
+  vencimento    DateTime  @db.Date
+  tipo          String    @default("BOLETO")
+  status        String    @default("PENDING")
+  linkPagamento String?   @map("link_pagamento")
+  invoiceUrl    String?   @map("invoice_url")
+  pixCopaCola   String?   @map("pix_copia_cola")
+  pagoEm        DateTime? @map("pago_em")
+  notificadoEm  DateTime? @map("notificado_em")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  contrato       Contrato? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
+  cliente  Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  contrato Contrato? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
 
   @@map("cobrancas")
 }
@@ -360,14 +596,14 @@ model CanalWhatsApp {
 }
 
 model TemplateMensagem {
-  id                 String             @id @default(uuid())
-  nome               String             @map("name")
-  categoria          String?
-  stage              String?            @map("stage")
-  conteudo           String             @map("content")
-  ativo              Boolean            @default(true) @map("is_active")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  nome      String   @map("name")
+  categoria String?
+  stage     String?  @map("stage")
+  conteudo  String   @map("content")
+  ativo     Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   mensagensAgendadas MensagemAgendada[]
 
@@ -375,23 +611,23 @@ model TemplateMensagem {
 }
 
 model MensagemAgendada {
-  id                String            @id @default(uuid())
-  clienteId         String            @map("cliente_id")
-  canal             String            @default("whatsapp") @map("channel")
-  templateId        String?           @map("template_id")
-  conteudoMensagem  String            @map("message_content")
-  agendadoPara      DateTime          @map("scheduled_for")
-  status            String            @default("scheduled")
-  externalMessageId String?           @map("external_message_id")
-  enviadoEm         DateTime?         @map("sent_at")
-  mensagemErro      String?           @map("error_message")
-  createdBy         String            @map("created_by")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  clienteId         String    @map("cliente_id")
+  canal             String    @default("whatsapp") @map("channel")
+  templateId        String?   @map("template_id")
+  conteudoMensagem  String    @map("message_content")
+  agendadoPara      DateTime  @map("scheduled_for")
+  status            String    @default("scheduled")
+  externalMessageId String?   @map("external_message_id")
+  enviadoEm         DateTime? @map("sent_at")
+  mensagemErro      String?   @map("error_message")
+  createdBy         String    @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  cliente           Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  template          TemplateMensagem? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  criador           Usuario           @relation("MensagemAgendadaCriador", fields: [createdBy], references: [id], onDelete: Cascade)
+  cliente  Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  template TemplateMensagem? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  criador  Usuario           @relation("MensagemAgendadaCriador", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([status, agendadoPara])
   @@map("mensagens_agendadas")

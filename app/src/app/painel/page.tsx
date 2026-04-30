@@ -234,6 +234,12 @@ export default async function DashboardPage() {
           <Link href="/painel/tarefas" className="btn-secondary">
             Ver tarefas
           </Link>
+            <Link href="/painel/calendario-conteudo" className="btn-secondary">
+              Calendario de conteudo
+            </Link>
+            <Link href="/painel/calendario-conteudo/ideias" className="btn-secondary">
+              Ideias (aprovacao)
+            </Link>
             <Link href="/painel/clientes" className="btn-secondary">
               Abrir CRM
             </Link>

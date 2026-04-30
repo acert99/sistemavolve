@@ -116,8 +116,11 @@ services:
       CLICKUP_PUBLIC_VIEW_URL_VOLVE: "${CLICKUP_PUBLIC_VIEW_URL_VOLVE:-}"
       CLICKUP_PUBLIC_VIEW_URL_VOLVE_HEALTH: "${CLICKUP_PUBLIC_VIEW_URL_VOLVE_HEALTH:-}"
       CRON_SECRET: ${CRON_SECRET}
+      CONTENT_CALENDAR_REPORT_ROOT: /app/reports/calendario-conteudo
       NEXT_PUBLIC_VPS_API_URL: https://app.volvemkt.com
       NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-https://volvemkt.com}"
+    volumes:
+      - ./reports:/app/reports:ro
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:

@@ -78,6 +78,12 @@ const operationsNav: NavItem[] = [
     icon: TasksIcon,
   },
   {
+    href: '/painel/relatorios',
+    label: 'Relatorios',
+    description: 'Historico e PDFs',
+    icon: ProposalIcon,
+  },
+  {
     href: '/painel/comunicacao',
     label: 'Comunicacao',
     description: 'WhatsApp, templates e agenda',

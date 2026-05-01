@@ -33,6 +33,7 @@ Pendências registradas:
   - Fechamento do dia às **18:39 BRT**.
   - Fechamento não deve sugerir “ação agora”; deve consolidar estado final, pendências e riscos para amanhã.
   - Segunda-feira: briefing semanal separado.
+- Implementação: `/api/cron/clickup-summary` aceita `type=kpi`, `type=briefing` e `type=closing`; `volve-kpi-daily.sh` envia duas mensagens de manhã e fechamento no fim do dia.
 
 Recomendações registradas:
 - Migrar scheduler para GitHub Actions (schedule) chamando `/api/cron/*` com secrets, ou

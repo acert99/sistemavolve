@@ -88,6 +88,13 @@ Decisão de produto/operação:
 - Fechamento não deve pedir “ação agora”; deve registrar estado final, pendências e riscos para amanhã.
 - Segunda-feira deve haver briefing semanal separado.
 
+Implementação no app:
+- `/api/cron/clickup-summary?mode=morning&type=kpi` gera o **KPI de Posts**.
+- `/api/cron/clickup-summary?mode=morning&type=briefing` gera o **Briefing do Dia**.
+- `/api/cron/clickup-summary?mode=eod&type=closing` gera o **Fechamento do Dia**.
+- `/opt/volve/scripts/volve-kpi-daily.sh morning` envia duas mensagens separadas: KPI + briefing.
+- `/opt/volve/scripts/volve-kpi-daily.sh eod` envia o fechamento.
+
 ## Estado atual conhecido
 
 ### Funcionando
@@ -103,10 +110,7 @@ Decisão de produto/operação:
 ### Pendências
 
 - Implementar a nova formatação final das mensagens:
-  - KPI de Posts
-  - Briefing do Dia
-  - Fechamento do Dia às 18:39
-  - Briefing Semanal de segunda
+- Refinar o Briefing Semanal de segunda como mensagem própria (hoje reaproveita o script da manhã).
 - Revisar/restaurar completamente scripts antigos:
   - `volve-client-reports.sh`
   - `volve-kpi-weekly-close.sh`

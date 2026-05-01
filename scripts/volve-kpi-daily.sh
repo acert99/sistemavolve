@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generates a ClickUp operational summary (morning/eod) by calling the app cron endpoint.
-# If Telegram is not configured, it appends the summary to /opt/volve/logs/volve-kpi-daily.log.
+# Sends Volve operational bot messages.
+# morning: sends two separate messages (KPI de Posts + Briefing do Dia)
+# eod: sends Fechamento do Dia
 
 MODE="${1:-morning}"
 
@@ -20,30 +21,22 @@ if [[ -z "${CRON_SECRET:-}" ]]; then
   exit 0
 fi
 
-JSON="$(curl -fsS -H "Authorization: Bearer ${CRON_SECRET}" "https://app.volvemkt.com/api/cron/clickup-summary?mode=${MODE}" || true)"
-if [[ -z "$JSON" ]]; then
-  echo "[volve-kpi-daily] Falha ao chamar /api/cron/clickup-summary (sem resposta)" >> "$LOG"
-  exit 0
-fi
+send_text() {
+  local text="$1"
 
-MARKDOWN="$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print((d.get('markdown') or '').strip())" <<<"$JSON" 2>/dev/null || true)"
+  if [[ -z "$text" ]]; then
+    echo "[volve-kpi-daily] Texto vazio; nada enviado" >> "$LOG"
+    return 0
+  fi
 
-if [[ -z "$MARKDOWN" ]]; then
-  echo "[volve-kpi-daily] Resposta sem markdown (provavel erro)." >> "$LOG"
-  echo "[volve-kpi-daily] Raw(first300): ${JSON:0:300}" >> "$LOG"
-  exit 0
-fi
+  if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+    echo "[volve-kpi-daily] TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ausentes; salvando no log" >> "$LOG"
+    echo "$text" >> "$LOG"
+    echo "---" >> "$LOG"
+    return 0
+  fi
 
-# Se não tiver Telegram configurado, pelo menos registra o KPI no log
-if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-  echo "[volve-kpi-daily] KPI gerado (mode=${MODE}), mas TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ausentes; salvando no log" >> "$LOG"
-  echo "$MARKDOWN" >> "$LOG"
-  echo "---" >> "$LOG"
-  exit 0
-fi
-
-# Envia para Telegram
-python3 - <<'PY' TEXT="$MARKDOWN" >> "$LOG" 2>&1
+  TEXT="$text" python3 - <<'PY' >> "$LOG" 2>&1
 import os,urllib.request,urllib.parse
 bot=os.environ['TELEGRAM_BOT_TOKEN'].strip()
 chat=os.environ['TELEGRAM_CHAT_ID'].strip()
@@ -54,6 +47,41 @@ data=urllib.parse.urlencode({
   'disable_web_page_preview': 'true',
 }).encode()
 urllib.request.urlopen(f'https://api.telegram.org/bot{bot}/sendMessage', data=data, timeout=30).read()
-print('KPI enviado para Telegram')
+print('Mensagem enviada para Telegram')
 PY
+}
 
+fetch_markdown() {
+  local mode="$1"
+  local type="$2"
+  local json markdown
+
+  json="$(curl -fsS -H "Authorization: Bearer ${CRON_SECRET}" "https://app.volvemkt.com/api/cron/clickup-summary?mode=${mode}&type=${type}" || true)"
+  if [[ -z "$json" ]]; then
+    echo "[volve-kpi-daily] Falha ao chamar /api/cron/clickup-summary?mode=${mode}&type=${type}" >> "$LOG"
+    return 0
+  fi
+
+  markdown="$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print((d.get('markdown') or '').strip())" <<<"$json" 2>/dev/null || true)"
+  if [[ -z "$markdown" ]]; then
+    echo "[volve-kpi-daily] Resposta sem markdown (mode=${mode}, type=${type})." >> "$LOG"
+    echo "[volve-kpi-daily] Raw(first300): ${json:0:300}" >> "$LOG"
+    return 0
+  fi
+
+  printf '%s' "$markdown"
+}
+
+case "$MODE" in
+  morning)
+    send_text "$(fetch_markdown morning kpi)"
+    send_text "$(fetch_markdown morning briefing)"
+    ;;
+  eod|closing)
+    send_text "$(fetch_markdown eod closing)"
+    ;;
+  *)
+    echo "[volve-kpi-daily] Modo invalido: $MODE" >> "$LOG"
+    exit 1
+    ;;
+esac

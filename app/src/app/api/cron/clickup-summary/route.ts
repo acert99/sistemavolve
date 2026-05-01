@@ -2,6 +2,51 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ClickUpTask, classificarTarefas } from '@/lib/clickup'
 
 const CLICKUP_API_BASE_URL = 'https://api.clickup.com/api/v2'
+const META_POSTS_POR_CLIENTE = 3
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function parseClickUpDate(value?: string | null) {
+  if (!value) return null
+  const numericValue = Number(value)
+  const parsed = Number.isNaN(numericValue) ? new Date(value) : new Date(numericValue)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function appDateKey(date: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
+function formatAppDate(date: Date) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date)
+}
+
+function getWeekWindow(referenceDate: Date) {
+  const current = new Date(`${appDateKey(referenceDate)}T12:00:00-03:00`)
+  const day = current.getDay() || 7
+  const start = new Date(current)
+  start.setDate(current.getDate() - day + 1)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return { startKey: appDateKey(start), endKey: appDateKey(end) }
+}
 
 function getClickUpToken() {
   const token = process.env.CLICKUP_API_TOKEN ?? process.env.CLICKUP_API_KEY
@@ -67,28 +112,135 @@ function pickTopLines(params: {
   tasks: ReturnType<typeof classificarTarefas>
   groupId: string
   limit?: number
+  showLinks?: boolean
 }) {
-  const { title, tasks, groupId, limit = 10 } = params
-  const rows = tasks.filter((t) => t.groupId === groupId).slice(0, limit)
-  const header = `\n*${title}* (${rows.length})`
-  if (rows.length === 0) return `${header}\n- (nenhuma)`
+  const { title, tasks, groupId, limit = 6, showLinks = false } = params
+  const allRows = tasks.filter((t) => t.groupId === groupId)
+  const rows = allRows.slice(0, limit)
+  const header = `\n${title} (${allRows.length})`
+  if (rows.length === 0) return `${header}\n- nenhuma`
 
   const lines = rows.map((task) => {
     const due = task.dueDateLabel ? ` — ${task.dueDateLabel}` : ''
     const prio = task.priorityLabel ? `(${task.priorityLabel}) ` : ''
     const client = task.clientName ? ` — ${task.clientName}` : ''
-    return `- ${prio}${task.name}${client}${due}\n  ${task.url}`
+    const link = showLinks ? `\n  ${task.url}` : ''
+    return `- ${client.replace(' — ', '')}: ${prio}${task.name}${due}${link}`
   })
 
-  return `${header}\n${lines.join('\n')}`
+  const remaining = allRows.length > rows.length ? `\n+${allRows.length - rows.length} restantes no ClickUp` : ''
+  return `${header}\n${lines.join('\n')}${remaining}`
+}
+
+function buildKpiPostsMarkdown(rawTasks: ClickUpTask[], generatedAt: Date) {
+  const { startKey, endKey } = getWeekWindow(generatedAt)
+  const doneStatuses = new Set(['programado', 'publicado'])
+  const ignoredStatuses = new Set(['arquivar'])
+
+  const weeklyTasks = rawTasks.filter((task) => {
+    const dueDate = parseClickUpDate(task.due_date)
+    if (!dueDate) return false
+    const key = appDateKey(dueDate)
+    return key >= startKey && key <= endKey && !ignoredStatuses.has(normalizeText(task.status.status))
+  })
+
+  const clients = Array.from(
+    new Set(rawTasks.map((task) => task.list?.name ?? 'Cliente nao identificado')),
+  ).sort()
+  const rows = clients.map((client) => {
+    const tasks = weeklyTasks.filter((task) => (task.list?.name ?? 'Cliente nao identificado') === client)
+    const realized = tasks.filter((task) => doneStatuses.has(normalizeText(task.status.status))).length
+    return { client, realized, meta: META_POSTS_POR_CLIENTE }
+  })
+
+  const totalMeta = rows.reduce((sum, row) => sum + row.meta, 0)
+  const totalRealized = rows.reduce((sum, row) => sum + row.realized, 0)
+  const critical = rows.filter((row) => row.realized === 0)
+  const attention = rows.filter((row) => row.realized > 0 && row.realized < row.meta)
+  const onTrack = rows.filter((row) => row.realized >= row.meta)
+
+  const section = (title: string, items: typeof rows) => {
+    if (items.length === 0) return `${title}\n- nenhum`
+    return `${title}\n${items.map((row) => `- ${row.client}: ${row.realized}/${row.meta}`).join('\n')}`
+  }
+
+  return [
+    `📊 KPI de Posts — manhã`,
+    '',
+    `Meta semanal: ${totalMeta} posts`,
+    `Realizado: ${totalRealized}/${totalMeta}`,
+    `Meta por cliente: ${META_POSTS_POR_CLIENTE} posts/semana`,
+    '',
+    section('Crítico', critical),
+    '',
+    section('Atenção', attention),
+    '',
+    section('No ritmo', onTrack),
+  ].join('\n')
+}
+
+function buildDailyBriefingMarkdown(tasks: ReturnType<typeof classificarTarefas>, generatedAt: Date) {
+  return [
+    `Briefing do Dia — ${formatAppDate(generatedAt)}`,
+    '',
+    pickTopLines({ title: 'Prioridade 1 — vencem hoje', tasks, groupId: 'hoje', limit: 6 }).replace(/^\n/, ''),
+    '',
+    pickTopLines({ title: 'Prioridade 2 — atrasadas', tasks, groupId: 'atrasado', limit: 6 }).replace(/^\n/, ''),
+    '',
+    pickTopLines({ title: 'Bloqueadas / aguardando material', tasks, groupId: 'bloqueado', limit: 6 }).replace(/^\n/, ''),
+    '',
+    pickTopLines({ title: 'Enviar para o cliente', tasks, groupId: 'enviar_cliente', limit: 6 }).replace(/^\n/, ''),
+  ].join('\n')
+}
+
+function buildDailyClosingMarkdown(params: {
+  rawTasks: ClickUpTask[]
+  tasks: ReturnType<typeof classificarTarefas>
+  generatedAt: Date
+}) {
+  const { rawTasks, tasks, generatedAt } = params
+  const todayKey = appDateKey(generatedAt)
+  const doneStatuses = new Set(['programado', 'publicado'])
+  const updatedDoneToday = rawTasks.filter((task) => {
+    const updated = parseClickUpDate(task.date_updated)
+    return updated && appDateKey(updated) === todayKey && doneStatuses.has(normalizeText(task.status.status))
+  })
+  const today = tasks.filter((task) => task.groupId === 'hoje')
+  const overdue = tasks.filter((task) => task.groupId === 'atrasado')
+  const blockers = tasks.filter((task) => task.groupId === 'bloqueado')
+  const tomorrow = tasks.filter((task) => task.groupId === 'amanha')
+
+  return [
+    `Fechamento do Dia — ${formatAppDate(generatedAt)}`,
+    '',
+    'Resumo',
+    `Programadas/publicadas hoje: ${updatedDoneToday.length}`,
+    `Ainda vencem hoje: ${today.length}`,
+    `Atrasadas abertas: ${overdue.length}`,
+    `Bloqueadas: ${blockers.length}`,
+    `Risco para amanhã: ${tomorrow.length}`,
+    '',
+    pickTopLines({ title: 'Pendências que entram no briefing de amanhã', tasks, groupId: 'hoje', limit: 5 }).replace(/^\n/, ''),
+    '',
+    pickTopLines({ title: 'Riscos para amanhã', tasks, groupId: 'amanha', limit: 5 }).replace(/^\n/, ''),
+    '',
+    'Observação',
+    'Sem ação imediata aqui. Isso entra organizado no briefing da manhã.',
+  ].join('\n')
 }
 
 function buildTelegramMarkdown(params: {
   mode: 'morning' | 'eod'
+  type: 'kpi' | 'briefing' | 'closing'
+  rawTasks: ClickUpTask[]
   tasks: ReturnType<typeof classificarTarefas>
   generatedAt: Date
 }) {
-  const { mode, tasks, generatedAt } = params
+  const { mode, type, rawTasks, tasks, generatedAt } = params
+
+  if (type === 'kpi') return buildKpiPostsMarkdown(rawTasks, generatedAt)
+  if (type === 'briefing') return buildDailyBriefingMarkdown(tasks, generatedAt)
+  if (type === 'closing') return buildDailyClosingMarkdown({ rawTasks, tasks, generatedAt })
 
   const title = mode === 'eod' ? 'ClickUp — Fechamento' : 'ClickUp — Manhã'
   const header = `${title}\nGerado em: ${generatedAt.toISOString()}`
@@ -122,6 +274,9 @@ async function handle(request: NextRequest) {
 
   const modeParam = (request.nextUrl.searchParams.get('mode') ?? 'morning').toLowerCase()
   const mode: 'morning' | 'eod' = modeParam === 'eod' ? 'eod' : 'morning'
+  const typeParam = (request.nextUrl.searchParams.get('type') ?? '').toLowerCase()
+  const type: 'kpi' | 'briefing' | 'closing' =
+    typeParam === 'kpi' ? 'kpi' : typeParam === 'closing' ? 'closing' : mode === 'eod' ? 'closing' : 'briefing'
 
   const folderIdVolve = process.env.CLICKUP_FOLDER_ID_VOLVE
   const folderIdHealth = process.env.CLICKUP_FOLDER_ID_VOLVE_HEALTH
@@ -146,11 +301,12 @@ async function handle(request: NextRequest) {
 
     const generatedAt = new Date()
     const classified = classificarTarefas(rawTasks, generatedAt)
-    const markdown = buildTelegramMarkdown({ mode, tasks: classified, generatedAt })
+    const markdown = buildTelegramMarkdown({ mode, type, rawTasks, tasks: classified, generatedAt })
 
     return NextResponse.json({
       success: true,
       mode,
+      type,
       generatedAt: generatedAt.toISOString(),
       total: rawTasks.length,
       markdown,
@@ -171,4 +327,3 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return handle(request)
 }
-

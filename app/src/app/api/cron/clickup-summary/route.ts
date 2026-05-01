@@ -66,9 +66,10 @@ function getClickUpTeamId() {
   return teamId
 }
 
-async function fetchFolderOpenTasks(folderId: string): Promise<ClickUpTask[]> {
+async function fetchFolderTasks(folderId: string, options?: { includeClosed?: boolean }): Promise<ClickUpTask[]> {
   const token = getClickUpToken()
   const teamId = getClickUpTeamId()
+  const includeClosed = options?.includeClosed ?? false
 
   const tasks: ClickUpTask[] = []
   let page = 0
@@ -76,7 +77,7 @@ async function fetchFolderOpenTasks(folderId: string): Promise<ClickUpTask[]> {
   while (page < 10) {
     const url = new URL(`${CLICKUP_API_BASE_URL}/team/${teamId}/task`)
     url.searchParams.append('folder_ids[]', folderId)
-    url.searchParams.set('include_closed', 'false')
+    url.searchParams.set('include_closed', includeClosed ? 'true' : 'false')
     url.searchParams.set('order_by', 'due_date')
     url.searchParams.set('page', String(page))
 
@@ -290,7 +291,8 @@ async function handle(request: NextRequest) {
   }
 
   try {
-    const rawTasks = (await Promise.all(folderIds.map((folderId) => fetchFolderOpenTasks(folderId))))
+    const includeClosedForKpi = type === 'kpi'
+    const rawTasks = (await Promise.all(folderIds.map((folderId) => fetchFolderTasks(folderId, { includeClosed: includeClosedForKpi }))))
       .flat()
       // evita duplicacao se uma tarefa aparecer em mais de um filtro
       .reduce<ClickUpTask[]>((acc, task) => {

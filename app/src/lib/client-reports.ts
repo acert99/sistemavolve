@@ -369,12 +369,17 @@ export function buildReportMarkdown(report: Prisma.ClientReportGetPayload<{ incl
 }
 
 export async function saveReportAsset(reportId: string, type: 'markdown' | 'pdf', content: Buffer | string, extension: string) {
-  const folder = path.join(process.cwd(), 'public', 'generated', 'reports', reportId)
+  // NOTE (ops): In production the app runs as a non-root user.
+  // Writing under /app/public may fail (EACCES). Persist assets under the mounted reports volume.
+  // docker-compose should mount ./reports:/app/reports (rw) and the host dir must be writable.
+  const root = process.env.REPORT_ASSETS_ROOT || path.join(process.cwd(), 'reports')
+  const folder = path.join(root, 'generated', 'reports', reportId)
   await mkdir(folder, { recursive: true })
   const filename = `${type}-${Date.now()}.${extension}`
   const filepath = path.join(folder, filename)
   await writeFile(filepath, content)
-  const publicUrl = `/generated/reports/${reportId}/${filename}`
+  // This URL is informational; download is typically handled via authenticated API.
+  const publicUrl = `/reports/generated/reports/${reportId}/${filename}`
   return prisma.clientReportAsset.create({
     data: {
       reportId,

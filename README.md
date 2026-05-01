@@ -279,6 +279,7 @@ Authorization: Bearer <CRON_SECRET>
 | Notificações cobranças      | `/api/cron/cobrancas`            | Diário 9h         |
 | Mensagens agendadas         | `/api/cron/scheduled-messages`   | A cada 1-5 min    |
 | Follow-ups comerciais       | `/api/cron/follow-up`            | A cada 5-15 min   |
+| Relatórios (semanal/mensal) | `/api/cron/client-reports`       | Sexta 17h (semanal) |
 
 Exemplo de crontab no VPS:
 
@@ -291,6 +292,10 @@ Exemplo de crontab no VPS:
 
 0 9 * * * curl -fsS -H "Authorization: Bearer SEU_CRON_SECRET" \
   https://app.volvemkt.com/api/cron/cobrancas >> /var/log/volve-cobrancas.log 2>&1
+
+# Relatórios semanais (gera/atualiza no banco e salva asset markdown)
+0 20 * * 5 curl -fsS -H "Authorization: Bearer SEU_CRON_SECRET" \
+  "https://app.volvemkt.com/api/cron/client-reports?type=weekly" >> /var/log/volve-client-reports.log 2>&1
 ```
 
 Observação: não configure múltiplos schedulers para o mesmo endpoint sem necessidade. O cron de mensagens agendadas reserva mensagens antes do envio para reduzir risco de duplicidade, mas manter um único scheduler continua sendo a operação recomendada.

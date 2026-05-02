@@ -3,6 +3,9 @@ import { ClickUpTask, classificarTarefas } from '@/lib/clickup'
 
 const CLICKUP_API_BASE_URL = 'https://api.clickup.com/api/v2'
 const META_POSTS_POR_CLIENTE = 3
+const CLIENT_WEEKLY_POST_TARGET_OVERRIDES: Record<string, number> = {
+  'Colégio Dom Bosco - Ipiaú': 0,
+}
 
 function normalizeText(value: string) {
   return value
@@ -151,8 +154,9 @@ function buildKpiPostsMarkdown(rawTasks: ClickUpTask[], generatedAt: Date) {
   const rows = clients.map((client) => {
     const tasks = weeklyTasks.filter((task) => (task.list?.name ?? 'Cliente nao identificado') === client)
     const realized = tasks.filter((task) => doneStatuses.has(normalizeText(task.status.status))).length
-    return { client, realized, meta: META_POSTS_POR_CLIENTE }
-  })
+    const meta = CLIENT_WEEKLY_POST_TARGET_OVERRIDES[client] ?? META_POSTS_POR_CLIENTE
+    return { client, realized, meta }
+  }).filter((row) => row.meta > 0)
 
   const totalMeta = rows.reduce((sum, row) => sum + row.meta, 0)
   const totalRealized = rows.reduce((sum, row) => sum + row.realized, 0)

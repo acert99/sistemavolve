@@ -3,8 +3,20 @@ import { ClickUpTask, classificarTarefas } from '@/lib/clickup'
 
 const CLICKUP_API_BASE_URL = 'https://api.clickup.com/api/v2'
 const META_POSTS_POR_CLIENTE = 3
-const CLIENT_WEEKLY_POST_TARGET_OVERRIDES: Record<string, number> = {
-  'Colégio Dom Bosco - Ipiaú': 0,
+const IGNORED_LIST_NAMES = new Set(['duplique essa lista'])
+
+interface ClickUpListConfig {
+  id: string
+  name: string
+  kpiPostsSemana: number
+  ignored: boolean
+}
+
+interface ClickUpListResponse {
+  id: string
+  name: string
+  content?: string | null
+  markdown_content?: string | null
 }
 
 function normalizeText(value: string) {
@@ -111,6 +123,63 @@ async function fetchFolderTasks(folderId: string, options?: { includeClosed?: bo
   return tasks
 }
 
+async function fetchList(listId: string): Promise<ClickUpListResponse> {
+  const token = getClickUpToken()
+  const response = await fetch(`${CLICKUP_API_BASE_URL}/list/${listId}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token,
+    },
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    throw new Error(`[ClickUp] /list/${listId} falhou: ${details}`)
+  }
+
+  return response.json() as Promise<ClickUpListResponse>
+}
+
+async function fetchFolderListConfigs(folderId: string): Promise<ClickUpListConfig[]> {
+  const token = getClickUpToken()
+  const response = await fetch(`${CLICKUP_API_BASE_URL}/folder/${folderId}/list`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token,
+    },
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    throw new Error(`[ClickUp] /folder/${folderId}/list falhou: ${details}`)
+  }
+
+  const data = (await response.json().catch(() => null)) as { lists?: Array<{ id: string; name: string }> } | null
+  const lists = data?.lists ?? []
+
+  return Promise.all(
+    lists.map(async (list) => {
+      const full = await fetchList(list.id)
+      const content = full.content ?? full.markdown_content ?? ''
+      return {
+        id: full.id,
+        name: full.name,
+        kpiPostsSemana: parseKpiPostsSemana(content, META_POSTS_POR_CLIENTE),
+        ignored: IGNORED_LIST_NAMES.has(normalizeText(full.name)),
+      }
+    }),
+  )
+}
+
+function parseKpiPostsSemana(content: string, fallback: number) {
+  const match = content.match(/(?:^|\n)\s*kpi_posts_semana\s*:\s*(\d+)\s*(?:\n|$)/i)
+  if (!match) return fallback
+  const value = Number(match[1])
+  return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
 function pickTopLines(params: {
   title: string
   tasks: ReturnType<typeof classificarTarefas>
@@ -136,10 +205,11 @@ function pickTopLines(params: {
   return `${header}\n${lines.join('\n')}${remaining}`
 }
 
-function buildKpiPostsMarkdown(rawTasks: ClickUpTask[], generatedAt: Date) {
+function buildKpiPostsMarkdown(rawTasks: ClickUpTask[], listConfigs: ClickUpListConfig[], generatedAt: Date) {
   const { startKey, endKey } = getWeekWindow(generatedAt)
   const doneStatuses = new Set(['programado', 'publicado'])
   const ignoredStatuses = new Set(['arquivar'])
+  const configByName = new Map(listConfigs.map((config) => [config.name, config]))
 
   const weeklyTasks = rawTasks.filter((task) => {
     const dueDate = parseClickUpDate(task.due_date)
@@ -148,13 +218,15 @@ function buildKpiPostsMarkdown(rawTasks: ClickUpTask[], generatedAt: Date) {
     return key >= startKey && key <= endKey && !ignoredStatuses.has(normalizeText(task.status.status))
   })
 
-  const clients = Array.from(
-    new Set(rawTasks.map((task) => task.list?.name ?? 'Cliente nao identificado')),
-  ).sort()
+  const clients = listConfigs
+    .filter((config) => !config.ignored)
+    .map((config) => config.name)
+    .sort()
+
   const rows = clients.map((client) => {
     const tasks = weeklyTasks.filter((task) => (task.list?.name ?? 'Cliente nao identificado') === client)
     const realized = tasks.filter((task) => doneStatuses.has(normalizeText(task.status.status))).length
-    const meta = CLIENT_WEEKLY_POST_TARGET_OVERRIDES[client] ?? META_POSTS_POR_CLIENTE
+    const meta = configByName.get(client)?.kpiPostsSemana ?? META_POSTS_POR_CLIENTE
     return { client, realized, meta }
   }).filter((row) => row.meta > 0)
 
@@ -174,7 +246,7 @@ function buildKpiPostsMarkdown(rawTasks: ClickUpTask[], generatedAt: Date) {
     '',
     `Meta semanal: ${totalMeta} posts`,
     `Realizado: ${totalRealized}/${totalMeta}`,
-    `Meta por cliente: ${META_POSTS_POR_CLIENTE} posts/semana`,
+    `Meta por cliente: conforme ClickUp`,
     '',
     section('Crítico', critical),
     '',
@@ -238,12 +310,13 @@ function buildTelegramMarkdown(params: {
   mode: 'morning' | 'eod'
   type: 'kpi' | 'briefing' | 'closing'
   rawTasks: ClickUpTask[]
+  listConfigs: ClickUpListConfig[]
   tasks: ReturnType<typeof classificarTarefas>
   generatedAt: Date
 }) {
-  const { mode, type, rawTasks, tasks, generatedAt } = params
+  const { mode, type, rawTasks, listConfigs, tasks, generatedAt } = params
 
-  if (type === 'kpi') return buildKpiPostsMarkdown(rawTasks, generatedAt)
+  if (type === 'kpi') return buildKpiPostsMarkdown(rawTasks, listConfigs, generatedAt)
   if (type === 'briefing') return buildDailyBriefingMarkdown(tasks, generatedAt)
   if (type === 'closing') return buildDailyClosingMarkdown({ rawTasks, tasks, generatedAt })
 
@@ -295,9 +368,18 @@ async function handle(request: NextRequest) {
   }
 
   try {
+    const listConfigs = (await Promise.all(folderIds.map((folderId) => fetchFolderListConfigs(folderId))))
+      .flat()
+      .reduce<ClickUpListConfig[]>((acc, config) => {
+        if (acc.some((item) => item.id === config.id)) return acc
+        acc.push(config)
+        return acc
+      }, [])
+    const ignoredListIds = new Set(listConfigs.filter((config) => config.ignored).map((config) => config.id))
     const includeClosedForKpi = type === 'kpi'
     const rawTasks = (await Promise.all(folderIds.map((folderId) => fetchFolderTasks(folderId, { includeClosed: includeClosedForKpi }))))
       .flat()
+      .filter((task) => !task.list?.id || !ignoredListIds.has(task.list.id))
       // evita duplicacao se uma tarefa aparecer em mais de um filtro
       .reduce<ClickUpTask[]>((acc, task) => {
         if (acc.some((item) => item.id === task.id)) return acc
@@ -307,7 +389,7 @@ async function handle(request: NextRequest) {
 
     const generatedAt = new Date()
     const classified = classificarTarefas(rawTasks, generatedAt)
-    const markdown = buildTelegramMarkdown({ mode, type, rawTasks, tasks: classified, generatedAt })
+    const markdown = buildTelegramMarkdown({ mode, type, rawTasks, listConfigs, tasks: classified, generatedAt })
 
     return NextResponse.json({
       success: true,
@@ -315,6 +397,11 @@ async function handle(request: NextRequest) {
       type,
       generatedAt: generatedAt.toISOString(),
       total: rawTasks.length,
+      listConfigs: listConfigs.map((config) => ({
+        name: config.name,
+        kpiPostsSemana: config.kpiPostsSemana,
+        ignored: config.ignored,
+      })),
       markdown,
     })
   } catch (error) {

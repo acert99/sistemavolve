@@ -95,6 +95,12 @@ Implementação no app:
 - `/opt/volve/scripts/volve-kpi-daily.sh morning` envia duas mensagens separadas: KPI + briefing.
 - `/opt/volve/scripts/volve-kpi-daily.sh eod` envia o fechamento.
 
+Fonte da meta semanal do KPI:
+- A meta de posts por cliente vem da descrição da lista no ClickUp.
+- Campo esperado: `kpi_posts_semana: N`.
+- Se `N = 0`, a lista não entra na meta de posts.
+- A lista template `DUPLIQUE ESSA LISTA` é ignorada explicitamente.
+
 ## Estado atual conhecido
 
 ### Funcionando

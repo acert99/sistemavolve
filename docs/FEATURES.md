@@ -34,6 +34,7 @@ Pendências registradas:
   - Fechamento não deve sugerir “ação agora”; deve consolidar estado final, pendências e riscos para amanhã.
   - Segunda-feira: briefing semanal separado.
 - Implementação: `/api/cron/clickup-summary` aceita `type=kpi`, `type=briefing` e `type=closing`; `volve-kpi-daily.sh` envia duas mensagens de manhã e fechamento no fim do dia.
+- Fonte da meta do KPI de Posts: descrição da lista no ClickUp, campo `kpi_posts_semana: N`. Listas com `kpi_posts_semana: 0` não entram na meta. A lista template `DUPLIQUE ESSA LISTA` é ignorada pelo código.
 
 Recomendações registradas:
 - Migrar scheduler para GitHub Actions (schedule) chamando `/api/cron/*` com secrets, ou

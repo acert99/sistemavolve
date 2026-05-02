@@ -7,6 +7,7 @@ set -euo pipefail
 # - Restores /opt/volve/scripts + /opt/volve/logs
 # - Installs:
 #   - volve-kpi-daily.sh (calls /api/cron/clickup-summary)
+#   - volve-kpi-weekly-close.sh (calls /api/cron/client-reports)
 #   - content calendar scripts + wrapper (content-calendar-monthly-run.sh)
 #
 # NOTE: Telegram delivery requires /opt/volve/.env.telegram with:
@@ -27,6 +28,7 @@ REMOTE
 
 scp \
   "$ROOT_DIR/scripts/volve-kpi-daily.sh" \
+  "$ROOT_DIR/scripts/volve-kpi-weekly-close.sh" \
   "$ROOT_DIR/scripts/content_calendar_generate.py" \
   "$ROOT_DIR/scripts/content_calendar_render_pdf.py" \
   "$ROOT_DIR/scripts/content_calendar_monthly_run.py" \
@@ -36,6 +38,7 @@ ssh "$VPS_HOST" 'bash -s' <<'REMOTE'
 set -euo pipefail
 chmod 700 \
   /opt/volve/scripts/volve-kpi-daily.sh \
+  /opt/volve/scripts/volve-kpi-weekly-close.sh \
   /opt/volve/scripts/content_calendar_generate.py \
   /opt/volve/scripts/content_calendar_render_pdf.py \
   /opt/volve/scripts/content_calendar_monthly_run.py

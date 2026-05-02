@@ -320,10 +320,20 @@ function getTaskGroup(task: ClickUpTask, referenceDate: Date) {
     return 'atrasado' as const
   }
 
+  if (dueDayKey === todayKey) {
+    return 'hoje' as const
+  }
+
+  const tomorrow = new Date(referenceDate)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowKey = getAppDateKey(tomorrow)
+
+  if (dueDayKey === tomorrowKey) {
+    return 'amanha' as const
+  }
+
   const businessDaysUntilDue = calcularDiasUteisAte(referenceDate, dueDate)
 
-  if (businessDaysUntilDue === 0) return 'hoje' as const
-  if (businessDaysUntilDue === 1) return 'amanha' as const
   if (businessDaysUntilDue <= 5) return 'esta_semana' as const
 
   return 'proximas_semanas' as const

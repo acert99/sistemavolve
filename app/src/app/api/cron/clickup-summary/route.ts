@@ -306,6 +306,11 @@ function buildDailyClosingMarkdown(params: {
   ].join('\n')
 }
 
+function shouldKeepForOperationalQueue(task: ClickUpTask) {
+  const status = normalizeText(task.status.status)
+  return !['programado', 'publicado', 'arquivar'].includes(status)
+}
+
 function buildTelegramMarkdown(params: {
   mode: 'morning' | 'eod'
   type: 'kpi' | 'briefing' | 'closing'
@@ -376,7 +381,7 @@ async function handle(request: NextRequest) {
         return acc
       }, [])
     const ignoredListIds = new Set(listConfigs.filter((config) => config.ignored).map((config) => config.id))
-    const includeClosedForKpi = type === 'kpi'
+    const includeClosedForKpi = type === 'kpi' || type === 'closing'
     const rawTasks = (await Promise.all(folderIds.map((folderId) => fetchFolderTasks(folderId, { includeClosed: includeClosedForKpi }))))
       .flat()
       .filter((task) => !task.list?.id || !ignoredListIds.has(task.list.id))
@@ -388,7 +393,8 @@ async function handle(request: NextRequest) {
       }, [])
 
     const generatedAt = new Date()
-    const classified = classificarTarefas(rawTasks, generatedAt)
+    const tasksForQueue = type === 'closing' ? rawTasks.filter(shouldKeepForOperationalQueue) : rawTasks
+    const classified = classificarTarefas(tasksForQueue, generatedAt)
     const markdown = buildTelegramMarkdown({ mode, type, rawTasks, listConfigs, tasks: classified, generatedAt })
 
     return NextResponse.json({

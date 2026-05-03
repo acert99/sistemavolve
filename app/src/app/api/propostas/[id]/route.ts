@@ -1,11 +1,20 @@
 import type { Prisma, StatusProposta } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { createLeadTimelineEntry, transitionLeadStage } from '@/lib/leads'
 import prisma from '@/lib/prisma'
 import { parseDateOnlyInAppTimeZone } from '@/lib/timezone'
 import { notificarProposta } from '@/lib/whatsapp'
+
+const itemPropostaSchema = z.object({
+  servicoId: z.string().optional(),
+  nome: z.string().min(1),
+  descricao: z.string().optional(),
+  quantidade: z.number().positive(),
+  valorUnitario: z.number().nonnegative(),
+})
 
 type Params = { params: { id: string } }
 
@@ -33,8 +42,18 @@ export async function GET(_request: NextRequest, { params }: Params) {
   }
 
   try {
-    const proposta = await prisma.proposta.findUnique({
-      where: { id: params.id },
+    const isCliente = session.user.perfil === 'cliente'
+    const sessionClienteId = session.user.clienteId
+
+    if (isCliente && !sessionClienteId) {
+      return NextResponse.json({ success: false, error: 'Nao autorizado' }, { status: 403 })
+    }
+
+    const proposta = await prisma.proposta.findFirst({
+      where: {
+        id: params.id,
+        ...(isCliente ? { clienteId: sessionClienteId } : {}),
+      },
       include: { cliente: true, lead: true },
     })
 
@@ -43,10 +62,6 @@ export async function GET(_request: NextRequest, { params }: Params) {
         { success: false, error: 'Proposta nao encontrada' },
         { status: 404 },
       )
-    }
-
-    if (session.user.perfil === 'cliente' && proposta.clienteId !== session.user.clienteId) {
-      return NextResponse.json({ success: false, error: 'Nao autorizado' }, { status: 403 })
     }
 
     return NextResponse.json({ success: true, data: proposta })
@@ -130,13 +145,20 @@ export async function PUT(request: NextRequest, { params }: Params) {
       return NextResponse.json({ success: true, data: atualizada })
     }
 
+    if (updateData.itens !== undefined) {
+      const itensResult = z.array(itemPropostaSchema).safeParse(updateData.itens)
+      if (!itensResult.success) {
+        return NextResponse.json({ success: false, error: 'Itens inválidos' }, { status: 400 })
+      }
+    }
+
     const nextStatus = parseStatus(updateData.status)
     const data: Prisma.PropostaUpdateInput = {
       ...(updateData.titulo ? { titulo: String(updateData.titulo).trim() } : {}),
       ...(updateData.descricao !== undefined
         ? { descricao: updateData.descricao ? String(updateData.descricao).trim() : null }
         : {}),
-      ...(updateData.itens ? { itens: updateData.itens as Prisma.InputJsonValue } : {}),
+      ...(updateData.itens !== undefined ? { itens: updateData.itens as Prisma.InputJsonValue } : {}),
       ...(updateData.valorTotal !== undefined
         ? { valorTotal: Number(updateData.valorTotal) }
         : {}),

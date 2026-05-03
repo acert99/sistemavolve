@@ -69,6 +69,7 @@ async function fetchInstanceMetadata() {
     const res = await fetch(`${EVOLUTION_URL}/instance/fetchInstances`, {
       headers: headers(),
       cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
     })
 
     if (!res.ok) return null
@@ -97,6 +98,7 @@ export async function getInstanceStatus(): Promise<InstanceStatus> {
     const res = await fetch(`${EVOLUTION_URL}/instance/connectionState/${INSTANCE_NAME}`, {
       headers: headers(),
       cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
     })
 
     if (!res.ok) {
@@ -145,6 +147,7 @@ async function deleteInstance(): Promise<void> {
     await fetch(`${EVOLUTION_URL}/instance/delete/${INSTANCE_NAME}`, {
       method: 'DELETE',
       headers: headers(),
+      signal: AbortSignal.timeout(10_000),
     })
   } catch {
     // ignora — pode não existir
@@ -156,6 +159,7 @@ async function createInstance(): Promise<boolean> {
     const res = await fetch(`${EVOLUTION_URL}/instance/create`, {
       method: 'POST',
       headers: headers(),
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         instanceName: INSTANCE_NAME,
         qrcode: true,
@@ -177,6 +181,7 @@ async function fetchConnectInfo(params?: { number?: string | null }): Promise<Ev
     const res = await fetch(url.toString(), {
       headers: headers(),
       cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -334,6 +339,7 @@ export async function sendTextMessage(phone: string, text: string): Promise<Send
       method: 'POST',
       headers: headers(),
       body: JSON.stringify({ number: formatPhone(phone), text, delay: 500 }),
+      signal: AbortSignal.timeout(30_000),
     })
 
     if (!res.ok) {

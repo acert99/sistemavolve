@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { addDays } from 'date-fns'
 import prisma from '@/lib/prisma'
+import { validateCronRequest } from '@/lib/security'
 import {
   differenceInAppCalendarDays,
   getAppDayRange,
@@ -22,14 +23,11 @@ import {
 import { notificarCobrancaVencida, notificarCobranca } from '@/lib/whatsapp'
 
 export async function GET(request: NextRequest) {
-  // Validação do CRON_SECRET
-  const authHeader = request.headers.get('authorization') ?? ''
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const auth = await validateCronRequest(request)
+  if (!auth.ok) {
     return NextResponse.json(
-      { success: false, error: 'Não autorizado' },
-      { status: 401 },
+      { success: false, error: auth.error },
+      { status: auth.status },
     )
   }
 

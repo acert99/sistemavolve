@@ -30,14 +30,25 @@ export async function GET(request: NextRequest) {
   const clienteId = searchParams.get('clienteId')
   const page      = Math.max(1, Number(searchParams.get('page') ?? '1'))
   const limit     = Math.min(50, Number(searchParams.get('limit') ?? '20'))
+  const isCliente = session.user.perfil === 'cliente'
+  const sessionClienteId = session.user.clienteId
 
   try {
+    if (isCliente && !sessionClienteId) {
+      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 403 })
+    }
+
+    if (isCliente && clienteId && clienteId !== sessionClienteId) {
+      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 403 })
+    }
+
     const where = {
-      ...(session.user.perfil === 'cliente'
-        ? { clienteId: session.user.clienteId }
-        : {}),
+      ...(isCliente
+        ? { clienteId: sessionClienteId }
+        : clienteId
+          ? { clienteId }
+          : {}),
       ...(status    ? { status }    : {}),
-      ...(clienteId ? { clienteId } : {}),
     }
 
     const [cobrancas, total] = await Promise.all([
@@ -204,7 +215,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: cobranca }, { status: 201 })
   } catch (err) {
     console.error('[POST /api/cobrancas]', err)
-    const msg = err instanceof Error ? err.message : 'Erro ao criar cobrança'
-    return NextResponse.json({ success: false, error: msg }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Erro ao criar cobrança' }, { status: 500 })
   }
 }

@@ -1,7 +1,18 @@
 import type { StatusProposta } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { transitionLeadStage } from '@/lib/leads'
+import { incrementCounter } from '@/lib/cache'
 import prisma from '@/lib/prisma'
+
+const RESPOND_RATE_LIMIT_PREFIX = 'proposal:respond:'
+const RESPOND_RATE_LIMIT_MAX = 10
+const RESPOND_RATE_LIMIT_TTL = 60 * 60
+
+function getRequestIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for')
+  if (forwarded) return forwarded.split(',')[0]?.trim() ?? 'unknown'
+  return request.headers.get('x-real-ip') ?? 'unknown'
+}
 
 type Params = { params: { token: string } }
 
@@ -11,6 +22,13 @@ function parsePublicStatus(value: unknown): Extract<StatusProposta, 'aceita' | '
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
+  const ip = getRequestIp(request)
+  const rateLimitKey = `${RESPOND_RATE_LIMIT_PREFIX}${ip.replace(/[^a-zA-Z0-9:._-]/g, '_')}`
+  const attempts = await incrementCounter(rateLimitKey, RESPOND_RATE_LIMIT_TTL)
+  if (attempts !== null && attempts > RESPOND_RATE_LIMIT_MAX) {
+    return NextResponse.json({ success: false, error: 'Too many requests' }, { status: 429 })
+  }
+
   let body: Record<string, unknown>
 
   try {
@@ -67,7 +85,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       }
     }
 
-    const feedback = body.feedback ? String(body.feedback).trim() : ''
+    const feedback = body.feedback ? String(body.feedback).trim().slice(0, 1000) : ''
 
     const atualizada = await prisma.proposta.update({
       where: { id: proposta.id },

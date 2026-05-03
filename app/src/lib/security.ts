@@ -29,6 +29,12 @@ function normalizeKeySegment(value: string) {
   return value.replace(/[^a-zA-Z0-9:._-]/g, '_')
 }
 
+function stripPlusAddressing(email: string): string {
+  const atIndex = email.lastIndexOf('@')
+  if (atIndex === -1) return email
+  return email.slice(0, atIndex).replace(/\+.*$/, '') + email.slice(atIndex)
+}
+
 function getRequestIp(request: NextRequest) {
   const forwardedFor = request.headers.get('x-forwarded-for')
   if (forwardedFor) {
@@ -81,7 +87,7 @@ export async function validateCronRequest(request: NextRequest): Promise<
  * Chame ANTES de tentar autenticar — se retornar true, rejeite imediatamente.
  */
 export async function incrementLoginFailure(email: string): Promise<boolean> {
-  const key = `${LOGIN_FAIL_PREFIX}${normalizeKeySegment(email.toLowerCase())}`
+  const key = `${LOGIN_FAIL_PREFIX}${normalizeKeySegment(stripPlusAddressing(email.toLowerCase()))}`
   const attempts = await incrementCounter(key, LOGIN_FAIL_TTL_SECONDS)
   return attempts !== null && attempts > LOGIN_FAIL_LIMIT
 }
@@ -90,6 +96,6 @@ export async function incrementLoginFailure(email: string): Promise<boolean> {
  * Apaga o contador de falhas de login após autenticação bem-sucedida.
  */
 export async function clearLoginFailures(email: string): Promise<void> {
-  const key = `${LOGIN_FAIL_PREFIX}${normalizeKeySegment(email.toLowerCase())}`
+  const key = `${LOGIN_FAIL_PREFIX}${normalizeKeySegment(stripPlusAddressing(email.toLowerCase()))}`
   await deleteKey(key)
 }

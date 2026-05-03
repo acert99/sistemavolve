@@ -1,5 +1,3 @@
-version: '3.8'
-
 # =============================================================================
 # Plataforma Volve — Stack Completa
 # Serviços: PostgreSQL, Redis, Evolution API, Caddy (SSL automático)

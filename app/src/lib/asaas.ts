@@ -3,6 +3,7 @@
 // Documentação: https://docs.asaas.com
 // Suporte: boleto, PIX, cartão de crédito e débito
 // =============================================================================
+import { timingSafeEqual } from 'crypto'
 
 const ASAAS_API_URL = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY!
@@ -72,6 +73,7 @@ export async function createOrFindCustomer(params: {
 
   const searchRes = await fetch(`${ASAAS_API_URL}/customers${query}`, {
     headers: headers(),
+    signal: AbortSignal.timeout(10_000),
   })
 
   if (searchRes.ok) {
@@ -85,6 +87,7 @@ export async function createOrFindCustomer(params: {
   const createRes = await fetch(`${ASAAS_API_URL}/customers`, {
     method: 'POST',
     headers: headers(),
+    signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
       name: nome,
       email,
@@ -120,6 +123,7 @@ export async function createCharge(
   const res = await fetch(`${ASAAS_API_URL}/payments`, {
     method: 'POST',
     headers: headers(),
+    signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
       customer: customerId,
       billingType,
@@ -147,7 +151,7 @@ export async function createCharge(
 export async function getPixQrCode(chargeId: string): Promise<AsaasPixQrCode> {
   const res = await fetch(
     `${ASAAS_API_URL}/payments/${chargeId}/pixQrCode`,
-    { headers: headers() },
+    { headers: headers(), signal: AbortSignal.timeout(10_000) },
   )
 
   if (!res.ok) {
@@ -164,7 +168,7 @@ export async function getPixQrCode(chargeId: string): Promise<AsaasPixQrCode> {
 export async function getCharge(chargeId: string): Promise<AsaasCharge> {
   const res = await fetch(
     `${ASAAS_API_URL}/payments/${chargeId}`,
-    { headers: headers() },
+    { headers: headers(), signal: AbortSignal.timeout(10_000) },
   )
 
   if (!res.ok) {
@@ -187,7 +191,7 @@ export async function listCustomerCharges(
 
   const res = await fetch(
     `${ASAAS_API_URL}/payments?${query.toString()}`,
-    { headers: headers() },
+    { headers: headers(), signal: AbortSignal.timeout(10_000) },
   )
 
   if (!res.ok) {
@@ -205,6 +209,7 @@ export async function deleteCharge(chargeId: string): Promise<boolean> {
   const res = await fetch(`${ASAAS_API_URL}/payments/${chargeId}`, {
     method: 'DELETE',
     headers: headers(),
+    signal: AbortSignal.timeout(10_000),
   })
 
   return res.ok
@@ -217,5 +222,13 @@ export async function deleteCharge(chargeId: string): Promise<boolean> {
 export function validateWebhookToken(tokenFromHeader: string): boolean {
   const expected = process.env.ASAAS_WEBHOOK_TOKEN
   if (!expected) return false
-  return tokenFromHeader === expected
+
+  const providedBuffer = Buffer.from(tokenFromHeader ?? '', 'utf8')
+  const expectedBuffer = Buffer.from(expected, 'utf8')
+
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false
+  }
+
+  return timingSafeEqual(providedBuffer, expectedBuffer)
 }

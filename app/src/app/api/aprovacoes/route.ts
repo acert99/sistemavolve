@@ -115,30 +115,53 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const aprovacaoAtualizada = await prisma.aprovacao.update({
-      where: { id: aprovacaoId },
-      data: {
-        status,
-        comentario: comentario?.trim() ?? null,
-        aprovadoEm: new Date(),
-      },
+    const novoStatusEntrega = status === 'aprovado' ? 'aprovado' : 'reprovado'
+    const comentarioNormalizado = comentario?.trim() || null
+    const aprovadoEm = new Date()
+
+    const aprovacaoAtualizada = await prisma.$transaction(async (tx) => {
+      const updated = await tx.aprovacao.updateMany({
+        where: {
+          id: aprovacaoId,
+          status: 'aguardando',
+        },
+        data: {
+          status,
+          comentario: comentarioNormalizado,
+          aprovadoEm,
+        },
+      })
+
+      if (updated.count === 0) {
+        return null
+      }
+
+      await tx.entrega.update({
+        where: { id: aprovacao.entregaId },
+        data: { status: novoStatusEntrega },
+      })
+
+      return tx.aprovacao.findUnique({
+        where: { id: aprovacaoId },
+      })
     })
 
-    const novoStatusEntrega = status === 'aprovado' ? 'aprovado' : 'reprovado'
-    await prisma.entrega.update({
-      where: { id: aprovacao.entregaId },
-      data: { status: novoStatusEntrega },
-    })
+    if (!aprovacaoAtualizada) {
+      return NextResponse.json(
+        { success: false, error: 'Esta aprovacao ja foi respondida' },
+        { status: 409 },
+      )
+    }
 
     if (aprovacao.entrega.clickupTaskId) {
       try {
         await updateTaskStatus(aprovacao.entrega.clickupTaskId, novoStatusEntrega)
 
-        if (comentario) {
+        if (comentarioNormalizado) {
           const autor = session.user.perfil === 'cliente' ? 'Cliente' : session.user.nome
           await addTaskComment(
             aprovacao.entrega.clickupTaskId,
-            `[${status.toUpperCase()}] por ${autor}: ${comentario}`,
+            `[${status.toUpperCase()}] por ${autor}: ${comentarioNormalizado}`,
           )
         }
       } catch (clickupErr) {

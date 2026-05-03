@@ -4,6 +4,7 @@
 // =============================================================================
 
 import crypto from 'crypto'
+import type { StatusEntrega } from '@prisma/client'
 import { CACHE_KEYS, deleteByPrefix, getOrSet } from '@/lib/cache'
 import { formatDateInAppTimeZone, formatDateTimeInAppTimeZone } from '@/lib/timezone'
 import {
@@ -197,6 +198,7 @@ async function clickUpFetch<T>(
     ...init,
     headers: headers(init?.headers),
     cache: 'no-store',
+    signal: AbortSignal.timeout(15_000),
   })
 
   if (!response.ok) {
@@ -561,10 +563,10 @@ export async function addTaskComment(taskId: string, comment: string): Promise<v
   })
 }
 
-export function mapClickUpStatus(clickupStatus: string): string | null {
+export function mapClickUpStatus(clickupStatus: string): StatusEntrega | null {
   const normalized = normalizeText(clickupStatus)
 
-  const statusMap: Record<string, string> = {
+  const statusMap: Record<string, StatusEntrega> = {
     'em producao': 'em_producao',
     'in production': 'em_producao',
     fazendo: 'em_producao',

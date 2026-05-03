@@ -35,14 +35,25 @@ export async function GET(request: NextRequest) {
   const leadId = searchParams.get('leadId')
   const page = Math.max(1, Number(searchParams.get('page') ?? '1'))
   const limit = Math.min(50, Number(searchParams.get('limit') ?? '20'))
+  const isCliente = session.user.perfil === 'cliente'
+  const sessionClienteId = session.user.clienteId
 
   try {
+    if (isCliente && !sessionClienteId) {
+      return NextResponse.json({ success: false, error: 'Nao autorizado' }, { status: 403 })
+    }
+
+    if (isCliente && clienteId && clienteId !== sessionClienteId) {
+      return NextResponse.json({ success: false, error: 'Nao autorizado' }, { status: 403 })
+    }
+
     const where: Prisma.PropostaWhereInput = {
-      ...(session.user.perfil === 'cliente'
-        ? { clienteId: session.user.clienteId }
-        : {}),
+      ...(isCliente
+        ? { clienteId: sessionClienteId }
+        : clienteId
+          ? { clienteId }
+          : {}),
       ...(status ? { status } : {}),
-      ...(clienteId ? { clienteId } : {}),
       ...(leadId ? { leadId } : {}),
     }
 
@@ -109,7 +120,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const token = randomUUID().replace(/-/g, '').slice(0, 16)
+  const token = randomUUID().replace(/-/g, '')
 
   try {
     const [cliente, lead] = await Promise.all([

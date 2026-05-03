@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLeadTimelineEntry, PROPOSAL_AUTO_LOST_REASON, transitionLeadStage } from '@/lib/leads'
 import prisma from '@/lib/prisma'
+import { validateCronRequest } from '@/lib/security'
 import { sendTextMessage } from '@/lib/whatsapp'
 
 const BATCH_SIZE = 30
 
 async function handle(request: NextRequest) {
-  const authHeader = request.headers.get('authorization') ?? ''
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const auth = await validateCronRequest(request)
+  if (!auth.ok) {
     return NextResponse.json(
-      { success: false, error: 'Nao autorizado' },
-      { status: 401 },
+      { success: false, error: auth.error },
+      { status: auth.status },
     )
   }
 

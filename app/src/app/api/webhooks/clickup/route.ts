@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     await prisma.entrega.update({
       where: { id: entrega.id },
       data: {
-        status: statusInterno as any,
+        status: statusInterno,
         updatedAt: new Date(),
       },
     })

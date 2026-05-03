@@ -3,6 +3,7 @@
 // Documentação: https://autentique.com.br/documentacao
 // API: https://api.autentique.com.br/v2/graphql
 // =============================================================================
+import { timingSafeEqual } from 'crypto'
 
 const AUTENTIQUE_URL = process.env.AUTENTIQUE_API_URL ?? 'https://api.autentique.com.br/v2/graphql'
 const AUTENTIQUE_KEY = process.env.AUTENTIQUE_API_KEY!
@@ -47,6 +48,7 @@ async function graphql<T>(
       'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(15_000),
   })
 
   if (!res.ok) {
@@ -118,6 +120,7 @@ export async function createDocument(params: {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${AUTENTIQUE_KEY}` },
     body: uploadData,
+    signal: AbortSignal.timeout(30_000),
   })
 
   if (!uploadRes.ok) {
@@ -260,5 +263,8 @@ export async function validateWebhookSignature(
   const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData)
   const expected = Buffer.from(sig).toString('hex')
 
-  return expected === signature
+  const expectedBuf = Buffer.from(expected, 'utf8')
+  const providedBuf = Buffer.from(signature ?? '', 'utf8')
+  if (expectedBuf.length !== providedBuf.length) return false
+  return timingSafeEqual(expectedBuf, providedBuf)
 }

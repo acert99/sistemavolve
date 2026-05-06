@@ -626,3 +626,61 @@ export async function registerWebhook(
     }),
   })
 }
+
+export async function getTasksForMonth(
+  folderId: string,
+  year: number,
+  month: number,
+): Promise<ClickUpTask[]> {
+  const teamId = getClickUpTeamId()
+
+  const startMs = new Date(year, month - 1, 1).getTime()
+  const endMs = new Date(year, month, 0, 23, 59, 59, 999).getTime()
+
+  const tasks: ClickUpTask[] = []
+  let page = 0
+
+  while (page < 5) {
+    const searchParams = new URLSearchParams()
+    searchParams.append('folder_ids[]', folderId)
+    searchParams.set('due_date_gt', String(startMs))
+    searchParams.set('due_date_lt', String(endMs))
+    searchParams.set('include_closed', 'true')
+    searchParams.set('order_by', 'due_date')
+    searchParams.set('page', String(page))
+
+    const data = await clickUpFetch<{ tasks: ClickUpTask[] }>(
+      `/team/${teamId}/task`,
+      undefined,
+      searchParams,
+    )
+
+    tasks.push(...(data.tasks ?? []))
+
+    if (!data.tasks || data.tasks.length < 100) break
+    page++
+  }
+
+  return tasks
+}
+
+export async function createClickUpTask(
+  listId: string,
+  task: {
+    name: string
+    description?: string
+    dueDateMs?: number
+    status?: string
+  },
+): Promise<ClickUpTask> {
+  const body: Record<string, unknown> = { name: task.name }
+
+  if (task.description) body.description = task.description
+  if (task.dueDateMs) body.due_date = task.dueDateMs
+  if (task.status) body.status = task.status
+
+  return clickUpFetch<ClickUpTask>(`/list/${listId}/task`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}

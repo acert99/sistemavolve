@@ -9,6 +9,7 @@ import { signOut, useSession } from 'next-auth/react'
 import {
   ApprovalIcon,
   BillingIcon,
+  CalendarIcon,
   CommercialIcon,
   ClientsIcon,
   CommunicationIcon,
@@ -76,6 +77,12 @@ const operationsNav: NavItem[] = [
     label: 'Tarefas',
     description: 'Fila de atencao',
     icon: TasksIcon,
+  },
+  {
+    href: '/painel/calendario-conteudo',
+    label: 'Calendario',
+    description: 'Ideias e conteudo com IA',
+    icon: CalendarIcon,
   },
   {
     href: '/painel/relatorios',

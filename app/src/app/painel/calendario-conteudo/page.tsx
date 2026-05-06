@@ -20,18 +20,8 @@ function formatSize(bytes: number) {
 function formatMonthLabel(month: string) {
   const [year, monthNumber] = month.split('-').map(Number)
   const names = [
-    'Janeiro',
-    'Fevereiro',
-    'Marco',
-    'Abril',
-    'Maio',
-    'Junho',
-    'Julho',
-    'Agosto',
-    'Setembro',
-    'Outubro',
-    'Novembro',
-    'Dezembro',
+    'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
   ]
   return `${names[(monthNumber || 1) - 1]}/${year}`
 }
@@ -67,13 +57,13 @@ export default async function ContentCalendarPage({ searchParams }: PageProps) {
           href="/painel/calendario-conteudo/ideias"
           className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
         >
-          Aprovar ideias (MVP)
+          Aprovar ideias com IA
         </a>
         <a
           href={showOldVersions ? '/painel/calendario-conteudo' : '/painel/calendario-conteudo?versions=all'}
           className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
         >
-          {showOldVersions ? 'Ocultar versões antigas' : 'Mostrar versões antigas'}
+          {showOldVersions ? 'Ocultar versoes antigas' : 'Mostrar versoes antigas'}
         </a>
       </div>
 
@@ -109,7 +99,7 @@ export default async function ContentCalendarPage({ searchParams }: PageProps) {
                         {humanizeSlug(pdf.clientSlug)}
                       </h3>
                       <p className="text-xs text-slate-500">
-                        {pdf.version ? `v${pdf.version}` : 'Sem versão'} · {formatSize(pdf.sizeBytes)}
+                        {pdf.version ? `v${pdf.version}` : 'Sem versao'} · {formatSize(pdf.sizeBytes)}
                       </p>
                       <p className="text-xs text-slate-500">
                         Atualizado em {formatDateTimeInAppTimeZone(new Date(pdf.updatedAt))}

@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   const now = new Date()
   const year = parseInt(searchParams.get('year') ?? String(now.getFullYear()))
   const month = parseInt(searchParams.get('month') ?? String(now.getMonth() + 1))
+  const listId = searchParams.get('listId') ?? null
 
   try {
     const portfolios = await getPortfolioFolders()
@@ -15,7 +16,9 @@ export async function GET(request: NextRequest) {
     const results = await Promise.all(
       portfolios.map(async (portfolio) => {
         const tasks = await getTasksForMonth(portfolio.folderId, year, month)
-        return tasks.map((task) => ({ ...task, _portfolio: portfolio.label }))
+        return tasks
+          .filter((task) => !listId || task.list?.id === listId)
+          .map((task) => ({ ...task, _portfolio: portfolio.label }))
       }),
     )
 

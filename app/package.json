@@ -16,7 +16,7 @@
     "seed:client": "node scripts/seed-client.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.0",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.17.0",
     "@react-pdf/renderer": "^3.4.4",
     "axios": "^1.7.3",
